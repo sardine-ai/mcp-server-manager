@@ -2,13 +2,13 @@
  * ClientsScreen - Manage MCP client connections (ink component)
  */
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import os from "os";
 import { ScreenLayout } from "../components/index.js";
 import { createMenuSections } from "../utils/menu.js";
-import { getClientService } from "../../services/client.service.js";
+import { ClientService, getClientService } from "../../services/client.service.js";
 import type { DetectedClient } from "../../types/index.js";
 import { useTheme } from "../theme/index.js";
 import { formatSwitchable } from "../../shared/formatters.js";
@@ -40,7 +40,11 @@ interface ClientsState {
 
 export function ClientsScreen({ onBack, currentProfileId, currentProfileName, onProfilePrev, onProfileNext }: ClientsScreenProps): React.ReactElement {
   const { theme } = useTheme();
-  const clientService = getClientService();
+  const [projectScope, setProjectScope] = useState(false);
+  const clientService = useMemo(
+    () => (projectScope ? new ClientService(process.cwd()) : getClientService()),
+    [projectScope]
+  );
 
   const [state, setState] = useState<ClientsState>({
     clients: clientService.detectClients(currentProfileId),
@@ -135,6 +139,19 @@ export function ClientsScreen({ onBack, currentProfileId, currentProfileName, on
       return;
     }
 
+    if (input.toLowerCase() === "s") {
+      const nextProjectScope = !projectScope;
+      const service = nextProjectScope ? new ClientService(process.cwd()) : getClientService();
+      setProjectScope(nextProjectScope);
+      setState((prev) => ({
+        ...prev,
+        clients: service.detectClients(currentProfileId),
+        currentIndex: 0,
+        message: null,
+      }));
+      return;
+    }
+
     // Navigation - Up
     if (key.upArrow && clients.length > 0) {
       setState((prev) => ({
@@ -189,6 +206,7 @@ export function ClientsScreen({ onBack, currentProfileId, currentProfileName, on
       { key: "←→", label: "Profile" },
       { key: "O", label: "Open config" },
       { key: "R", label: "Refresh" },
+      { key: "S", label: "Global/Current folder" },
     ],
     showData: false,
     showConfig: false,
@@ -223,6 +241,9 @@ export function ClientsScreen({ onBack, currentProfileId, currentProfileName, on
         ) : undefined
       }
     >
+      <Text dimColor>
+        Scope: {projectScope ? `Current folder (${process.cwd()})` : "Global"} · S to switch
+      </Text>
       {clients.length === 0 ? (
         <Text dimColor>No clients detected.</Text>
       ) : (

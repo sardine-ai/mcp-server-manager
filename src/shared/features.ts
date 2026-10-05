@@ -131,6 +131,14 @@ export const FEATURES: Feature[] = [
     requiredInTui: true,
   },
   {
+    id: "clients-scope",
+    name: "Global or project client configuration",
+    category: "clients",
+    cliCommands: ["clients connect --scope", "clients list --scope", "clients disconnect --scope", "clients open --scope"],
+    tuiImplementation: "ClientsScreen.tsx (S key)",
+    requiredInTui: true,
+  },
+  {
     id: "clients-open",
     name: "Open client config",
     category: "clients",

@@ -22,18 +22,18 @@ import { OpenCodeStrategy } from "./opencode.strategy.js";
 /**
  * Strategy factory - creates strategy instances
  */
-const strategyFactories: Record<ClientId, () => IClientStrategy> = {
-  claude: () => new ClaudeStrategy(),
-  cursor: () => new CursorStrategy(),
-  windsurf: () => new WindsurfStrategy(),
-  kiro: () => new KiroStrategy(),
-  vscode: () => new VSCodeStrategy(),
-  "claude-code": () => new ClaudeCodeStrategy(),
-  codex: () => new CodexStrategy(),
-  gemini: () => new GeminiStrategy(),
-  zed: () => new ZedStrategy(),
-  antigravity: () => new AntigravityStrategy(),
-  opencode: () => new OpenCodeStrategy(),
+const strategyFactories: Record<ClientId, (projectDir?: string) => IClientStrategy> = {
+  claude: (projectDir) => new ClaudeStrategy(projectDir),
+  cursor: (projectDir) => new CursorStrategy(projectDir),
+  windsurf: (projectDir) => new WindsurfStrategy(projectDir),
+  kiro: (projectDir) => new KiroStrategy(projectDir),
+  vscode: (projectDir) => new VSCodeStrategy(projectDir),
+  "claude-code": (projectDir) => new ClaudeCodeStrategy(projectDir),
+  codex: (projectDir) => new CodexStrategy(projectDir),
+  gemini: (projectDir) => new GeminiStrategy(projectDir),
+  zed: (projectDir) => new ZedStrategy(projectDir),
+  antigravity: (projectDir) => new AntigravityStrategy(projectDir),
+  opencode: (projectDir) => new OpenCodeStrategy(projectDir),
 };
 
 /**
@@ -44,10 +44,12 @@ const strategyCache = new Map<ClientId, IClientStrategy>();
 /**
  * Get a strategy instance for a client
  */
-export function getClientStrategy(clientId: ClientId): IClientStrategy | null {
+export function getClientStrategy(clientId: ClientId, projectDir?: string): IClientStrategy | null {
   if (!strategyFactories[clientId]) {
     return null;
   }
+
+  if (projectDir) return strategyFactories[clientId](projectDir);
 
   let strategy = strategyCache.get(clientId);
   if (!strategy) {

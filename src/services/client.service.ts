@@ -4,6 +4,7 @@
  */
 
 import fs from "fs";
+import path from "path";
 import { spawnSync } from "child_process";
 import type {
   ClientId,
@@ -19,6 +20,17 @@ import { getClientStrategy, getRegisteredClientIds, clearStrategyCache } from ".
 
 /** Client service class */
 export class ClientService {
+  constructor(private readonly projectDir?: string) {
+    if (projectDir) this.projectDir = path.resolve(projectDir);
+  }
+
+  private getStrategy(clientId: ClientId) {
+    return getClientStrategy(clientId, this.projectDir);
+  }
+
+  supportsProjectConfig(clientId: ClientId) {
+    return !!this.getStrategy(clientId)?.paths.project;
+  }
   /** Get current platform */
   private getPlatform(): Platform {
     return process.platform as Platform;
@@ -26,13 +38,13 @@ export class ClientService {
 
   /** Get config path for a client on current platform */
   getClientConfigPath(clientId: ClientId): string | null {
-    const strategy = getClientStrategy(clientId);
+    const strategy = this.getStrategy(clientId);
     return strategy?.getPrimaryConfigPath(this.getPlatform()) || null;
   }
 
   /** Get client display name */
   getClientName(clientId: ClientId): string {
-    const strategy = getClientStrategy(clientId);
+    const strategy = this.getStrategy(clientId);
     return strategy?.metadata.displayName || clientId;
   }
 
@@ -43,19 +55,19 @@ export class ClientService {
 
   /** Check if a client is installed */
   isClientInstalled(clientId: ClientId): boolean {
-    const strategy = getClientStrategy(clientId);
+    const strategy = this.getStrategy(clientId);
     return strategy?.isInstalled(this.getPlatform()) || false;
   }
 
   /** Read client's current config */
   readClientConfig(clientId: ClientId): ClientMcpConfig | null {
-    const strategy = getClientStrategy(clientId);
+    const strategy = this.getStrategy(clientId);
     return strategy?.readConfig() || null;
   }
 
   /** Write client's config */
   writeClientConfig(clientId: ClientId, config: ClientMcpConfig): boolean {
-    const strategy = getClientStrategy(clientId);
+    const strategy = this.getStrategy(clientId);
     return strategy?.writeConfig(config) || false;
   }
 
@@ -65,8 +77,8 @@ export class ClientService {
     const clients: DetectedClient[] = [];
 
     for (const clientId of this.getSupportedClients()) {
-      const strategy = getClientStrategy(clientId);
-      if (!strategy) continue;
+      const strategy = this.getStrategy(clientId);
+      if (!strategy || (this.projectDir && !strategy.paths.project)) continue;
 
       const installed = strategy.isInstalled(platform);
       const status = strategy.getStatus(platform, profileId);
@@ -89,7 +101,7 @@ export class ClientService {
 
   /** Connect servers to a specific client (add mcpsm gateway to client config) */
   connectClient(clientId: ClientId, profileId?: string): OperationResult {
-    const strategy = getClientStrategy(clientId);
+    const strategy = this.getStrategy(clientId);
     if (!strategy) {
       return { success: false, error: "Unknown client" };
     }
@@ -102,7 +114,7 @@ export class ClientService {
 
   /** Disconnect servers from a specific client (remove our servers from client config) */
   disconnectClient(clientId: ClientId, profileId?: string): OperationResult {
-    const strategy = getClientStrategy(clientId);
+    const strategy = this.getStrategy(clientId);
     if (!strategy) {
       return { success: false, error: "Unknown client" };
     }
@@ -115,7 +127,7 @@ export class ClientService {
     succeeded: string[];
     failed: { id: string; error: string }[];
   } {
-    const strategy = getClientStrategy(clientId);
+    const strategy = this.getStrategy(clientId);
     if (!strategy) {
       return { succeeded: [], failed: [{ id: "*", error: "Unknown client" }] };
     }
@@ -145,7 +157,7 @@ export class ClientService {
     succeeded: string[];
     failed: { id: string; error: string }[];
   } {
-    const strategy = getClientStrategy(clientId);
+    const strategy = this.getStrategy(clientId);
     if (!strategy) {
       return { succeeded: [], failed: [{ id: "*", error: "Unknown client" }] };
     }
@@ -173,7 +185,7 @@ export class ClientService {
 
   /** Get connection status for a client */
   getConnectionStatus(clientId: ClientId, profileId?: string): ClientStatus {
-    const strategy = getClientStrategy(clientId);
+    const strategy = this.getStrategy(clientId);
     if (!strategy) {
       return "not-installed";
     }
@@ -205,7 +217,7 @@ export class ClientService {
 
   /** Check if client exists */
   clientExists(clientId: string): clientId is ClientId {
-    return getClientStrategy(clientId as ClientId) !== null;
+    return this.getStrategy(clientId as ClientId) !== null;
   }
 }
 

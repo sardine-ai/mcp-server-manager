@@ -4,6 +4,7 @@
  */
 
 import fs from "fs";
+import { parseJsonWithComments } from "../../shared/json.js";
 import path from "path";
 import { JsonClientStrategy } from "./json-client.strategy.js";
 import type {
@@ -30,6 +31,7 @@ export class OpenCodeStrategy extends JsonClientStrategy {
   };
 
   readonly paths: ClientPlatformPaths = {
+    project: "opencode.json",
     // Primary path is the XDG standard location: $HOME/.config/opencode/config.json
     primary: {
       darwin: path.join(this.getHomedir(), ".config", "opencode", "config.json"),
@@ -41,6 +43,11 @@ export class OpenCodeStrategy extends JsonClientStrategy {
       linux: "/usr/local/bin/opencode",
     },
   };
+
+  getPrimaryConfigPath(platform: Platform) {
+    if (this.projectDir) return this.getWriteConfigPath();
+    return super.getPrimaryConfigPath(platform);
+  }
 
   // === Server Container Access (uses 'mcp' not 'mcpServers') ===
 
@@ -57,10 +64,11 @@ export class OpenCodeStrategy extends JsonClientStrategy {
     return { ...config, $schema: OpenCodeStrategy.OPENCODE_SCHEMA_URL, mcp: servers };
   }
 
-  buildGatewayConfig(port: number): ClientServerConfig {
+  buildGatewayConfig(port: number, profileId?: string): ClientServerConfig {
+    const mcpPath = profileId ? `/mcp/${profileId}` : "/mcp";
     return {
       type: "remote",
-      url: `http://localhost:${port}/mcp`,
+      url: `http://localhost:${port}${mcpPath}`,
     };
   }
 
@@ -70,6 +78,12 @@ export class OpenCodeStrategy extends JsonClientStrategy {
    * 2. $HOME/.opencode.json (legacy fallback)
    */
   private getConfigSearchPaths(): string[] {
+    if (this.projectDir) {
+      return [
+        path.join(this.projectDir, "opencode.json"),
+        path.join(this.projectDir, "opencode.jsonc"),
+      ];
+    }
     const homedir = this.getHomedir();
     const xdgConfigHome = process.env.XDG_CONFIG_HOME || path.join(homedir, ".config");
 
@@ -135,7 +149,7 @@ export class OpenCodeStrategy extends JsonClientStrategy {
 
     try {
       const data = fs.readFileSync(configPath, "utf8");
-      return JSON.parse(data) as ClientMcpConfig;
+      return this.projectDir ? parseJsonWithComments(data) : (JSON.parse(data) as ClientMcpConfig);
     } catch (error) {
       this.log.debug(`Failed to read config from ${configPath}:`, error);
       return null;

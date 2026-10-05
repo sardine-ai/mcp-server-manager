@@ -28,6 +28,7 @@ export class CodexStrategy extends TomlClientStrategy {
   };
 
   readonly paths: ClientPlatformPaths = {
+    project: ".codex/config.toml",
     primary: {
       darwin: path.join(this.getHomedir(), ".codex/config.toml"),
       win32: path.join(this.getHomedir(), ".codex/config.toml"),
@@ -56,7 +57,7 @@ export class CodexStrategy extends TomlClientStrategy {
 
     if (mcpServersToml) {
       for (const [name, server] of Object.entries(mcpServersToml)) {
-        if (server.command || server.url) {
+        if (server.command || server.url || this.projectDir) {
           const serverConfig: ClientServerConfig = {};
 
           if (server.command) {
@@ -92,7 +93,24 @@ export class CodexStrategy extends TomlClientStrategy {
 
     if (config.mcpServers) {
       for (const [name, server] of Object.entries(config.mcpServers)) {
-        const serverConfig: TOML.JsonMap = {};
+        const existingServers = existingConfig.mcp_servers;
+        const existingServer =
+          this.projectDir &&
+          existingServers &&
+          typeof existingServers === "object" &&
+          !Array.isArray(existingServers) &&
+          !(existingServers instanceof Date)
+            ? existingServers[name]
+            : undefined;
+        const serverConfig: TOML.JsonMap =
+          existingServer &&
+          typeof existingServer === "object" &&
+          !Array.isArray(existingServer) &&
+          !(existingServer instanceof Date) &&
+          existingServer.command === server.command &&
+          existingServer.url === server.url
+            ? { ...existingServer }
+            : {};
 
         if (server.command) {
           serverConfig.command = server.command;

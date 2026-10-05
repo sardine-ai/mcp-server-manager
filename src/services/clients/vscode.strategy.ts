@@ -11,7 +11,7 @@ import type {
   ClientCapabilities,
   ClientPlatformPaths,
 } from "../../types/client-strategy.types.js";
-import type { ClientServerConfig, ClientMcpConfig, Platform } from "../../types/index.js";
+import type { ClientServerConfig, ClientMcpConfig } from "../../types/index.js";
 
 export class VSCodeStrategy extends JsonClientStrategy {
   readonly metadata: ClientMetadata = {
@@ -28,6 +28,7 @@ export class VSCodeStrategy extends JsonClientStrategy {
   };
 
   readonly paths: ClientPlatformPaths = {
+    project: ".vscode/mcp.json",
     primary: {
       darwin: path.join(this.getHomedir(), "Library/Application Support/Code/User/mcp.json"),
       win32: path.join(this.getAppData(), "Code/User/mcp.json"),
@@ -61,10 +62,5 @@ export class VSCodeStrategy extends JsonClientStrategy {
       command: "npx",
       args: ["-y", "supergateway", "--streamableHttp", `http://localhost:${port}${mcpPath}`],
     };
-  }
-
-  // VS Code uses its primary path for real-time loading (same as primary)
-  getEffectiveConfigPath(platform: Platform): string | null {
-    return this.paths.primary[platform] || null;
   }
 }

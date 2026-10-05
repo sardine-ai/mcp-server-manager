@@ -32,7 +32,7 @@ export abstract class BaseClientStrategy implements IClientStrategy {
   abstract readonly capabilities: ClientCapabilities;
   abstract readonly paths: ClientPlatformPaths;
 
-  constructor() {
+  constructor(protected readonly projectDir?: string) {
     this.log = createLogger(this.constructor.name);
   }
 
@@ -53,14 +53,19 @@ export abstract class BaseClientStrategy implements IClientStrategy {
   // === Path Resolution ===
 
   getPrimaryConfigPath(platform: Platform): string | null {
+    if (this.projectDir) {
+      return this.paths.project ? path.join(this.projectDir, this.paths.project) : null;
+    }
     return this.paths.primary[platform] || null;
   }
 
   getSecondaryConfigPath(): string | null {
+    if (this.projectDir) return null;
     return this.paths.secondary || null;
   }
 
   getEffectiveConfigPath(platform: Platform): string | null {
+    if (this.projectDir) return this.getPrimaryConfigPath(platform);
     // Real-time clients use secondary path as source of truth
     if (this.capabilities.hasSecondaryConfigPath && this.paths.secondary) {
       return this.paths.secondary;
@@ -71,8 +76,11 @@ export abstract class BaseClientStrategy implements IClientStrategy {
   // === Installation Detection ===
 
   isInstalled(platform: Platform): boolean {
-    const configPath = this.getPrimaryConfigPath(platform);
+    const configPath = this.paths.primary[platform];
     if (!configPath) return false;
+
+    const projectPath = this.projectDir ? this.getPrimaryConfigPath(platform) : null;
+    if (projectPath && fs.existsSync(projectPath)) return true;
 
     // Check if config file exists
     if (fs.existsSync(configPath)) return true;
@@ -162,12 +170,21 @@ export abstract class BaseClientStrategy implements IClientStrategy {
   connect(port: number, profileId?: string): OperationResult {
     const platform = this.getPlatform();
 
+    if (this.projectDir && !this.paths.project) {
+      return { success: false, error: "Client does not support project configuration" };
+    }
+
     if (!this.isInstalled(platform)) {
       return { success: false, error: "Client not installed" };
     }
 
     try {
-      let config = this.readConfig() || {};
+      const existingConfig = this.readConfig();
+      const configPath = this.getEffectiveConfigPath(platform);
+      if (this.projectDir && configPath && fs.existsSync(configPath) && !existingConfig) {
+        return { success: false, error: "Could not read project config; file was not changed" };
+      }
+      let config = existingConfig || {};
       config = this.addGateway(config, port, profileId);
 
       const success = this.writeConfig(config);
@@ -182,8 +199,15 @@ export abstract class BaseClientStrategy implements IClientStrategy {
   }
 
   disconnect(profileId?: string): OperationResult {
+    if (this.projectDir && !this.paths.project) {
+      return { success: false, error: "Client does not support project configuration" };
+    }
     try {
       const config = this.readConfig();
+      const configPath = this.getEffectiveConfigPath(this.getPlatform());
+      if (this.projectDir && configPath && fs.existsSync(configPath) && !config) {
+        return { success: false, error: "Could not read project config; file was not changed" };
+      }
 
       if (!config || !this.hasGateway(config, profileId)) {
         return { success: true }; // Already disconnected

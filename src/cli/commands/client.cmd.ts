@@ -5,9 +5,19 @@
 import { Command } from "commander";
 import { colors, c } from "../../shared/colors.js";
 import { outputJson } from "../../shared/formatters.js";
-import { getClientService } from "../../services/client.service.js";
+import { ClientService, getClientService } from "../../services/client.service.js";
 import { getProfileService } from "../../services/profile.service.js";
+import { promptSelect } from "../../shared/prompts.js";
 import type { ClientId } from "../../types/index.js";
+
+type ClientScope = "global" | "project";
+
+function serviceForScope(scope?: string) {
+  if (scope && scope !== "global" && scope !== "project") {
+    throw new Error("Scope must be global or project");
+  }
+  return scope === "project" ? new ClientService(process.cwd()) : getClientService();
+}
 
 /** Register client commands */
 export function registerClientCommands(program: Command): void {
@@ -18,8 +28,9 @@ export function registerClientCommands(program: Command): void {
     .command("list", { isDefault: true })
     .description("List detected MCP clients")
     .option("--json", "Output in JSON format")
+    .option("--scope <scope>", "Configuration scope: global or project", "global")
     .action(async (options) => {
-      const clientService = getClientService();
+      const clientService = serviceForScope(options.scope);
       const detectedClients = clientService.detectClients();
 
       if (options.json) {
@@ -68,8 +79,9 @@ export function registerClientCommands(program: Command): void {
     .command("connect <client>")
     .description("Connect servers to a client")
     .option("-p, --profile <profileId>", "Connect using a specific profile")
-    .action(async (clientId: string, options: { profile?: string }) => {
-      const clientService = getClientService();
+    .option("--scope <scope>", "Configuration scope: global or project")
+    .action(async (clientId: string, options: { profile?: string; scope?: string }) => {
+      let clientService = serviceForScope(options.scope);
       const clientName = clientService.getClientName(clientId as ClientId);
 
       if (!clientService.clientExists(clientId)) {
@@ -80,6 +92,19 @@ export function registerClientCommands(program: Command): void {
 
       if (!clientService.isClientInstalled(clientId as ClientId)) {
         console.log(`${c.cross} ${clientName} is not installed`);
+        process.exit(1);
+      }
+
+      if (!options.scope && process.stdin.isTTY && clientService.supportsProjectConfig(clientId)) {
+        const scope = await promptSelect<ClientScope>("Where should the client be configured?", [
+          { label: "Global", value: "global" },
+          { label: `Current folder (${process.cwd()})`, value: "project" },
+        ]);
+        if (!scope) return;
+        clientService = serviceForScope(scope);
+      }
+      if (options.scope === "project" && !clientService.supportsProjectConfig(clientId)) {
+        console.log(`${c.cross} ${clientName} does not support project configuration`);
         process.exit(1);
       }
 
@@ -131,8 +156,9 @@ export function registerClientCommands(program: Command): void {
     .command("disconnect <client>")
     .description("Disconnect servers from a client")
     .option("-p, --profile <profileId>", "Disconnect a specific profile")
-    .action(async (clientId: string, options: { profile?: string }) => {
-      const clientService = getClientService();
+    .option("--scope <scope>", "Configuration scope: global or project", "global")
+    .action(async (clientId: string, options: { profile?: string; scope?: string }) => {
+      const clientService = serviceForScope(options.scope);
       const clientName = clientService.getClientName(clientId as ClientId);
 
       if (!clientService.clientExists(clientId)) {
@@ -179,8 +205,9 @@ export function registerClientCommands(program: Command): void {
   clients
     .command("open <client>")
     .description("Open client config in editor")
-    .action(async (clientId: string) => {
-      const clientService = getClientService();
+    .option("--scope <scope>", "Configuration scope: global or project", "global")
+    .action(async (clientId: string, options: { scope: string }) => {
+      const clientService = serviceForScope(options.scope);
 
       if (!clientService.clientExists(clientId)) {
         console.log(`${c.cross} Unknown client '${clientId}'`);

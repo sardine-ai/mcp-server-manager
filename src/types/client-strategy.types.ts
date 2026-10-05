@@ -43,6 +43,7 @@ export interface ClientCapabilities {
 export interface ClientPlatformPaths {
   /** Primary config path per platform */
   primary: Partial<Record<Platform, string>>;
+  project?: string;
   /** Secondary (real-time) config path, if applicable */
   secondary?: string | null;
   /** App bundle paths for installation detection (macOS) */

@@ -79,8 +79,8 @@ describe("App Component", () => {
     it("should show menu panel with shortcuts", () => {
       const { lastFrame } = render(<App />);
 
-      // Check for shortcuts without the "Shortcuts:" label
-      expect(lastFrame()).toContain("•A"); // Add shortcut
+      // Check for shortcuts in grouped layout
+      expect(lastFrame()).toContain("A Add"); // Add shortcut
       expect(lastFrame()).toContain("Profile"); // May be truncated in display
       expect(lastFrame()).toContain("Doctor");
     });
@@ -108,7 +108,6 @@ describe("App Component", () => {
     it("should display local servers when configured", () => {
       const { lastFrame } = render(<App />);
 
-      expect(lastFrame()).toContain("Servers");
       expect(lastFrame()).toContain("Server One");
     });
 
@@ -139,7 +138,7 @@ describe("App Component", () => {
       stdin.write("a");
       await waitForStateUpdate(500); // Longer wait for Windows CI
 
-      expect(lastFrame()).toContain("Add New MCP Server");
+      expect(lastFrame()).toContain("Add Server");
     });
 
     it("should navigate to tools screen on T key", async () => {
@@ -209,7 +208,7 @@ describe("App Component", () => {
       await waitForStateUpdate();
 
       expect(lastFrame()).toContain("MCP Server Manager");
-      expect(lastFrame()).toContain("•A"); // Check for shortcuts without label
+      expect(lastFrame()).toContain("A Add"); // Check for shortcuts
     });
   });
 
@@ -321,7 +320,7 @@ describe("App Component", () => {
       stdin.write("A"); // Uppercase
       await waitForStateUpdate();
 
-      expect(lastFrame()).toContain("Add New MCP Server");
+      expect(lastFrame()).toContain("Add Server");
     });
 
     it("should handle lowercase keys", async () => {
@@ -330,7 +329,7 @@ describe("App Component", () => {
       stdin.write("a"); // Lowercase
       await waitForStateUpdate();
 
-      expect(lastFrame()).toContain("Add New MCP Server");
+      expect(lastFrame()).toContain("Add Server");
     });
   });
 

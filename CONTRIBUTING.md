@@ -320,8 +320,8 @@ For feature requests, please include:
 
 ## Questions?
 
-- Check the [documentation](https://mateustorquato.github.io/mcp-server-manager/docs/guide/getting-started)
-- Search existing [issues](https://github.com/MateusTorquato/mcp-server-manager/issues)
+- Check the [documentation](https://sardine-ai.github.io/mcp-server-manager/docs/guide/getting-started)
+- Search existing [issues](https://github.com/sardine-ai/mcp-server-manager/issues)
 - Open a new issue for questions or discussions
 
 ## Code of Conduct

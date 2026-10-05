@@ -1,2354 +1,1980 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MCP Server Manager - Unified CLI & TUI for Managing MCP Servers</title>
-  <script src="https://unpkg.com/typed.js@2.1.0/dist/typed.umd.js"></script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@300;400;500&display=swap');
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: 'Inter', 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: radial-gradient(circle at top, rgba(0, 255, 136, 0.08), transparent 45%),
-        radial-gradient(circle at 20% 20%, rgba(0, 204, 255, 0.1), transparent 35%),
-        #050b13;
-      color: #c9d1d9;
-      line-height: 1.6;
-    h1, h2, h3, h4, h5, h6 {
-      font-family: 'Space Grotesk', 'Inter', sans-serif;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-    }
-      min-height: 100vh;
-      position: relative;
-      overflow-x: hidden;
-    }
-
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-      background-size: 140px 140px;
-      opacity: 0.35;
-      z-index: -2;
-    }
-
-    body::after {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"><circle cx="2" cy="2" r="1" fill="rgba(255,255,255,0.08)"/></svg>');
-      opacity: 0.15;
-      z-index: -1;
-      filter: blur(0.3px);
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 24px;
-      position: relative;
-      z-index: 1;
-      overflow: visible;
-    }
-
-    /* Hero Section */
-    .hero {
-      padding: 40px 24px 25px;
-      background: 
-        radial-gradient(circle at top, rgba(0, 204, 255, 0.18), transparent 55%),
-        linear-gradient(135deg, rgba(0, 255, 136, 0.09), rgba(5, 10, 20, 0.9)),
-        url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><defs><style>.node { fill: rgba(0, 255, 136, 0.08); } .connection { stroke: rgba(0, 204, 255, 0.06); stroke-width: 1; fill: none; }</style></defs><circle class="node" cx="150" cy="120" r="4"/><circle class="node" cx="320" cy="80" r="3"/><circle class="node" cx="480" cy="140" r="4"/><circle class="node" cx="650" cy="100" r="3"/><circle class="node" cx="200" cy="250" r="3"/><circle class="node" cx="380" cy="280" r="4"/><circle class="node" cx="550" cy="260" r="3"/><circle class="node" cx="720" cy="300" r="4"/><circle class="node" cx="120" cy="400" r="3"/><circle class="node" cx="300" cy="420" r="4"/><circle class="node" cx="500" cy="380" r="3"/><circle class="node" cx="680" cy="450" r="4"/><line class="connection" x1="150" y1="120" x2="320" y2="80"/><line class="connection" x1="320" y1="80" x2="480" y2="140"/><line class="connection" x1="480" y1="140" x2="650" y2="100"/><line class="connection" x1="200" y1="250" x2="380" y2="280"/><line class="connection" x1="380" y1="280" x2="550" y2="260"/><line class="connection" x1="550" y1="260" x2="720" y2="300"/><line class="connection" x1="120" y1="400" x2="300" y2="420"/><line class="connection" x1="300" y1="420" x2="500" y2="380"/><line class="connection" x1="500" y1="380" x2="680" y2="450"/><line class="connection" x1="150" y1="120" x2="200" y2="250"/><line class="connection" x1="320" y1="80" x2="380" y2="280"/><line class="connection" x1="480" y1="140" x2="550" y2="260"/><line class="connection" x1="200" y1="250" x2="120" y2="400"/><line class="connection" x1="380" y1="280" x2="300" y2="420"/></svg>');
-      background-size: cover, cover, 800px 600px;
-      background-position: center, center, center;
-      background-repeat: no-repeat, no-repeat, repeat;
-      border-bottom: 1px solid rgba(0, 255, 136, 0.2);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .hero::after {
-      content: '';
-      position: absolute;
-      inset: 20px 12%;
-      border: 1px solid rgba(0, 204, 255, 0.15);
-      border-radius: 32px;
-      pointer-events: none;
-    }
-
-    .hero::before {
-      content: '';
-      position: absolute;
-      width: 500px;
-      height: 500px;
-      background: radial-gradient(circle, rgba(0, 255, 136, 0.25), transparent 60%);
-      top: -200px;
-      right: -120px;
-      filter: blur(30px);
-    }
-
-    .hero .container {
-      position: relative;
-      z-index: 1;
-    }
-
-    .hero-content {
-      max-width: 720px;
-      margin: 0 auto;
-      text-align: center;
-    }
-
-    .hero-kicker {
-      font-size: 0.95rem;
-      letter-spacing: 0.5em;
-      text-transform: uppercase;
-      color: rgba(0, 255, 136, 0.8);
-      margin-bottom: 18px;
-    }
-
-    .hero-meta {
-      font-size: 0.95rem;
-      color: rgba(147, 166, 199, 0.85);
-      margin-bottom: 18px;
-    }
-
-    .hero-meta a {
-      color: #00ff88;
-      text-decoration: none;
-      border-bottom: 1px dashed rgba(0, 255, 136, 0.5);
-    }
-
-    .hero h1 {
-      font-size: 3rem;
-      font-weight: 700;
-      margin-bottom: 16px;
-      line-height: 1.2;
-      background: linear-gradient(120deg, #00ff88 30%, #00ccff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      text-shadow: 0 0 35px rgba(0, 255, 136, 0.35);
-    }
-
-    .hero p {
-      font-size: 1.05rem;
-      color: #9fb2c3;
-      margin-bottom: 20px;
-      max-width: 520px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    .hero-orb {
-      position: absolute;
-      width: 220px;
-      height: 220px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(0, 204, 255, 0.35), transparent);
-      filter: blur(12px);
-      animation: float 10s ease-in-out infinite;
-    }
-
-    .hero-orb.left {
-      top: -40px;
-      left: -60px;
-    }
-
-    .hero-orb.right {
-      bottom: -60px;
-      right: -20px;
-      animation-delay: 2.5s;
-      background: radial-gradient(circle, rgba(0, 255, 136, 0.3), transparent);
-    }
-
-    @keyframes float {
-      0% { transform: translateY(0) scale(1); opacity: 0.6; }
-      50% { transform: translateY(-20px) scale(1.05); opacity: 1; }
-      100% { transform: translateY(0) scale(1); opacity: 0.6; }
-    }
-
-    .cta-buttons {
-      display: flex;
-      gap: 20px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-top: 12px;
-      margin-bottom: 12px;
-    }
-
-    .btn {
-      padding: 16px 40px;
-      border-radius: 8px;
-      font-size: 1.1rem;
-      font-weight: 600;
-      text-decoration: none;
-      transition: all 0.3s ease;
-      display: inline-block;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      animation: buttonPulse 6s ease-in-out infinite;
-    }
-
-    .btn-primary {
-      background: #00ff88;
-      color: #0d1117;
-    }
-
-    .btn-primary:hover {
-      background: #00cc66;
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0, 255, 136, 0.4);
-    }
-
-    .btn-secondary {
-      background: transparent;
-      color: #00ccff;
-      border: 2px solid #00ccff;
-    }
-
-    .btn-secondary:hover {
-      background: rgba(210, 159, 255, 0.15);
-      transform: translateY(-2px);
-    }
-
-    @keyframes buttonPulse {
-      0%, 100% { box-shadow: 0 0 0 rgba(0, 255, 136, 0); }
-      50% { box-shadow: 0 0 16px rgba(0, 255, 136, 0.35); }
-    }
-
-    /* Mobile Responsive - Hero Section */
-    @media (max-width: 767px) {
-      /* Remove border/card effect on mobile */
-      .hero::after {
-        display: none;
-      }
-
-      /* Reduce H1 font size for mobile and improve line breaks */
-      .hero h1 {
-        font-size: 1.85rem;
-        line-height: 1.3;
-        text-wrap: balance;
-      }
-
-      /* Add more horizontal padding to text content */
-      .hero-content {
-        padding: 0 24px;
-      }
-
-      /* Increase horizontal padding for description text */
-      .hero p {
-        padding: 0 16px;
-      }
-
-      /* Reduce button padding and height - thinner buttons */
-      .btn {
-        padding: 8px 16px;
-        font-size: 0.8rem;
-        text-align: center;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        white-space: nowrap;
-      }
-
-      /* Keep buttons side by side and centered on mobile */
-      .cta-buttons {
-        gap: 8px;
-        flex-wrap: nowrap;
-        justify-content: center;
-        align-items: stretch;
-        display: flex;
-      }
-      
-      .cta-buttons .btn {
-        flex: 1 1 0;
-        min-width: 0;
-        width: 0;
-        max-width: 160px;
-        box-sizing: border-box;
-      }
-
-      /* Adjust hero padding for mobile */
-      .hero {
-        padding: 40px 0 25px;
-      }
-
-      /* Hide redundant badges on mobile */
-      .hero-badges {
-        display: none;
-      }
-
-      /* Reduce section titles size on mobile - create clear hierarchy */
-      .section-title {
-        font-size: 1.3rem;
-        line-height: 1.3;
-        margin: 0.6em 0 0.8rem;
-        text-transform: none;
-        text-shadow: none;
-        letter-spacing: 0.02em;
-      }
-
-      /* Fix CTA panel title - reduce font size and increase line-height */
-      .cta-panel h2 {
-        font-size: 1.75rem;
-        line-height: 1.4;
-        text-transform: none;
-        letter-spacing: 0.02em;
-      }
-
-      /* Reduce CTA panel padding on mobile */
-      .cta-panel {
-        padding: 40px 24px;
-      }
-
-      /* Transform feature cards to horizontal layout on mobile */
-      .feature-card {
-        padding: 12px;
-        display: flex;
-        flex-direction: row;
-        align-items: flex-start;
-        text-align: left;
-        gap: 12px;
-      }
-
-      /* Icon on the left, fixed size */
-      .feature-icon {
-        margin-bottom: 0;
-        width: 48px;
-        height: 48px;
-        font-size: 1.1rem;
-        flex-shrink: 0;
-      }
-
-      /* Text content on the right */
-      .feature-card > .feature-title,
-      .feature-card > .feature-description {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .feature-title {
-        margin-bottom: 4px;
-        font-size: 0.95rem;
-        line-height: 1.3;
-      }
-
-      .feature-description {
-        font-size: 0.8rem;
-        line-height: 1.4;
-        margin: 0;
-      }
-
-      /* Reduce terminal body height and remove top spacing on mobile */
-      .terminal-body {
-        min-height: auto;
-        padding: 16px 20px;
-        display: block;
-      }
-
-      /* Reduce spacing inside terminal content */
-      .terminal-body > div {
-        margin-top: 0;
-      }
-
-      /* Ensure clients grid stays at 2 columns on mobile */
-      .clients-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 16px;
-      }
-    }
-
-    /* Section Styles */
-    section {
-      padding: 40px 0;
-      position: relative;
-      overflow: visible;
-    }
-    
-    /* Terminal section - appears earlier */
-    #terminal-section {
-      padding: 20px 0 40px;
-      margin-top: 3rem;
-    }
-
-    section::before {
-      content: '';
-      position: absolute;
-      inset: 20px 5%;
-      border-top: 1px solid rgba(0, 204, 255, 0.08);
-      border-bottom: 1px solid rgba(0, 204, 255, 0.08);
-      pointer-events: none;
-    }
-
-    .section-title {
-      text-align: center;
-      font-size: 2.6rem;
-      font-weight: 800;
-      margin: 0.8em 0 1rem;
-      padding: 0.4em 0;
-      line-height: 1.4;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      background: linear-gradient(120deg, #00ff88 30%, #00ccff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      text-shadow: 0 0 20px rgba(0, 255, 136, 0.35);
-      overflow: visible;
-      display: block;
-    }
-
-    .section-subtitle {
-      text-align: center;
-      font-size: 1.1rem;
-      color: #93a6c7;
-      margin-bottom: 2rem;
-      letter-spacing: 0.04em;
-    }
-
-    /* Terminal Toggle */
-    .terminal-toggle-wrapper {
-      max-width: 900px;
-      margin: 40px auto 0;
-    }
-
-    .terminal-tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 20px;
-      justify-content: center;
-    }
-
-    .terminal-tab {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 14px 28px;
-      background: rgba(4, 10, 18, 0.6);
-      border: 1px solid rgba(0, 204, 255, 0.25);
-      border-radius: 12px;
-      color: #93a6c7;
-      font-size: 1rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      font-family: 'Space Grotesk', sans-serif;
-    }
-
-    .terminal-tab:hover {
-      border-color: rgba(0, 255, 136, 0.4);
-      color: #c9f7ff;
-      background: rgba(4, 10, 18, 0.8);
-    }
-
-    .terminal-tab.active {
-      background: rgba(0, 255, 136, 0.15);
-      border-color: #00ff88;
-      color: #00ff88;
-      box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
-    }
-
-    .terminal-tab .tab-icon {
-      font-size: 1.2rem;
-    }
-
-    .terminal-container {
-      position: relative;
-    }
-
-    .terminal-container .terminal-demo {
-      display: none;
-    }
-
-    .terminal-container .terminal-demo.active {
-      display: block;
-      animation: fadeInTerminal 0.4s ease;
-    }
-
-    @keyframes fadeInTerminal {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    .terminal-demo {
-      position: relative;
-      background: #050b13;
-      border-radius: 18px;
-      overflow: hidden;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
-      border: 1px solid rgba(0, 255, 136, 0.18);
-    }
-
-    .terminal-demo::before {
-      content: '';
-      position: absolute;
-      inset: 1px;
-      border-radius: 17px;
-      border: 1px solid rgba(0, 204, 255, 0.15);
-      pointer-events: none;
-    }
-
-    .terminal-header {
-      background: linear-gradient(120deg, rgba(0, 255, 136, 0.12), rgba(13, 17, 23, 0.8));
-      padding: 14px 18px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      border-bottom: 1px solid rgba(0, 255, 136, 0.15);
-    }
-
-    .terminal-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-    }
-
-    .terminal-dot.red { background: #ff5f56; }
-    .terminal-dot.yellow { background: #ffbd2e; }
-    .terminal-dot.green { background: #27c93f; }
-
-    .terminal-title {
-      flex: 1;
-      text-align: center;
-      color: #c9f7ff;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-
-    .terminal-body {
-      padding: 28px;
-      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-      font-size: 13px;
-      line-height: 1.6;
-      min-height: 550px;
-      color: #c9d1d9;
-      position: relative;
-      overflow-y: visible;
-      background: radial-gradient(circle at top left, rgba(0, 255, 136, 0.06), transparent 50%);
-      user-select: text;
-      -webkit-user-select: text;
-      -moz-user-select: text;
-      -ms-user-select: text;
-    }
-
-    /* CLI specific styles */
-    #cli-demo {
-      overflow-x: hidden;
-      word-wrap: break-word;
-      user-select: text;
-      -webkit-user-select: text;
-      -moz-user-select: text;
-      -ms-user-select: text;
-    }
-
-    #cli-demo > div {
-      white-space: pre-wrap;
-      word-break: break-all;
-      overflow-wrap: break-word;
-      user-select: text;
-      -webkit-user-select: text;
-      -moz-user-select: text;
-      -ms-user-select: text;
-    }
-
-    #cli-demo .command {
-      white-space: pre-wrap;
-      word-break: break-all;
-      overflow-wrap: break-word;
-      display: inline;
-      user-select: text;
-      -webkit-user-select: text;
-      -moz-user-select: text;
-      -ms-user-select: text;
-    }
-
-    /* TUI specific styles - keep original behavior */
-    #tui-demo {
-      overflow-x: visible;
-    }
-
-    #tui-demo > div {
-      white-space: normal;
-    }
-
-    #cli-demo .command::selection {
-      background: rgba(0, 255, 136, 0.3);
-      color: #c9d1d9;
-    }
-
-    #cli-demo .command::-moz-selection {
-      background: rgba(0, 255, 136, 0.3);
-      color: #c9d1d9;
-    }
-    
-    #cli-demo .prompt::selection {
-      background: rgba(0, 255, 136, 0.3);
-      color: #00ff88;
-    }
-    
-    #cli-demo .prompt::-moz-selection {
-      background: rgba(0, 255, 136, 0.3);
-      color: #00ff88;
-    }
-    
-    /* Ensure all elements in CLI terminal are selectable */
-    #cli-demo * {
-      user-select: text !important;
-      -webkit-user-select: text !important;
-      -moz-user-select: text !important;
-      -ms-user-select: text !important;
-    }
-    
-    /* Typed.js spans should also be selectable */
-    #cli-demo span[class*="typed"] {
-      user-select: text !important;
-      -webkit-user-select: text !important;
-      -moz-user-select: text !important;
-      -ms-user-select: text !important;
-    }
-
-    .typed-cursor {
-      opacity: 0 !important;
-      display: none !important;
-    }
-
-    span[class*="typed"] {
-      background: transparent !important;
-      text-decoration: none !important;
-      border: none !important;
-      outline: none !important;
-    }
-
-.terminal-demo {
-  position: relative;
-}
-
-.tui-screen {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  min-height: 550px;
-    }
-
-    .prompt { color: #00ff88; }
-    .command { color: #79c0ff; }
-    .output { color: #8b949e; }
-    .success { color: #00ff88; }
-
-    .cursor-blink {
-      display: inline-block;
-      width: 8px;
-      height: 16px;
-      background: #00ccff;
-      animation: blink 1s infinite;
-      margin-left: 2px;
-    }
-
-    @keyframes blink {
-      0%, 49% { opacity: 1; }
-      50%, 100% { opacity: 0; }
-    }
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* TUI Styles */
-    .tui-screen {
-      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-      font-size: 13px;
-      line-height: 1.5;
-      transition: opacity 0.3s;
-      position: relative;
-      width: 100%;
-      height: 100%;
-      min-height: 550px;
-      display: block;
-    }
-
-    .tui-header {
-      border: 1px solid #00ccff;
-      border-radius: 4px;
-      padding: 12px 20px;
-      margin-bottom: 16px;
-    }
-
-    .tui-title {
-      color: #00ccff;
-      font-size: 18px;
-      font-weight: bold;
-    }
-
-    .tui-subtitle {
-      color: #8b949e;
-      margin-top: 4px;
-    }
-
-    .tui-panel {
-      border: 1px solid #00ff88;
-      border-radius: 4px;
-      padding: 8px 4px;
-      margin-bottom: 8px;
-    }
-
-    .tui-panel-title {
-      color: #00ff88;
-      font-weight: bold;
-      margin-bottom: 8px;
-      padding: 0 4px;
-    }
-
-    .tui-server-item {
-      padding: 4px 0;
-      color: #8b949e;
-      position: relative;
-      padding-left: 20px;
-    }
-
-    .tui-server-item.selected {
-      color: #c9d1d9;
-      background: #1f2937;
-      padding-left: 20px;
-      border-radius: 4px;
-    }
-
-    .tui-server-item .tui-cursor {
-      position: absolute;
-      left: 0;
-      color: #00ff88;
-    }
-
-    .tui-shortcuts {
-      border: 1px solid #8b949e;
-      border-radius: 4px;
-      padding: 8px 4px;
-      color: #8b949e;
-      font-size: 12px;
-    }
-
-    /* Features Grid */
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
-    }
-
-    @media (max-width: 1024px) {
-      .features-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
-    }
-
-    @media (max-width: 640px) {
-      .features-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .feature-card {
-      position: relative;
-      overflow: hidden;
-      background: radial-gradient(circle at top left, rgba(0, 255, 136, 0.08), transparent 60%),
-        #0f151f;
-      border: 1px solid rgba(0, 255, 136, 0.3);
-      border-radius: 12px;
-      padding: 24px;
-      transition: transform 0.3s ease, border 0.3s ease, box-shadow 0.3s ease;
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
-    }
-
-    .feature-card::after {
-      content: '';
-      position: absolute;
-      inset: 1px;
-      border-radius: 11px;
-      border: 1px solid rgba(0, 204, 255, 0.15);
-      pointer-events: none;
-    }
-
-    .feature-card:hover {
-      border-color: #00ff88;
-      transform: translateY(-4px);
-      box-shadow: 0 12px 32px rgba(0, 255, 136, 0.25);
-    }
-
-    .feature-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 12px;
-      font-size: 1.2rem;
-      font-weight: 600;
-      color: #050b13;
-      background: linear-gradient(135deg, #00ff88, #00ccff);
-      box-shadow: 0 8px 20px rgba(0, 255, 136, 0.35);
-    }
-
-    .feature-icon::before {
-      content: attr(data-icon);
-      color: #050b13;
-    }
-
-    .feature-card[data-accent="green"] {
-      border-color: rgba(0, 255, 136, 0.4);
-    }
-
-    .feature-card[data-accent="cyan"] {
-      border-color: rgba(0, 204, 255, 0.4);
-    }
-
-    .feature-card[data-accent="magenta"] {
-      border-color: rgba(210, 159, 255, 0.4);
-    }
-
-    .feature-card[data-accent="orange"] {
-      border-color: rgba(255, 180, 110, 0.4);
-    }
-
-
-    .feature-title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      margin-bottom: 8px;
-      color: #e4f7ff;
-      text-shadow: 0 0 8px rgba(0, 255, 136, 0.25);
-    }
-
-    .feature-description {
-      color: #9fb2c3;
-      line-height: 1.5;
-      font-size: 0.9rem;
-    }
-
-    /* Clients Grid */
-    .clients-panel {
-      max-width: 1000px;
-      margin: 0 auto;
-    }
-
-    .clients-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
-    }
-
-    @media (max-width: 768px) {
-      .clients-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
-    }
-
-    .client-card {
-      position: relative;
-      background: #080f19;
-      border: 1px solid rgba(0, 204, 255, 0.25);
-      border-radius: 12px;
-      padding: 28px 20px;
-      text-align: center;
-      transition: all 0.3s ease;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    }
-
-
-    .client-card:hover {
-      border-color: #00ccff;
-      box-shadow: 0 18px 40px rgba(0, 204, 255, 0.25);
-      transform: translateY(-6px) scale(1.01);
-    }
-
-    .client-icon {
-      width: 80px;
-      height: 80px;
-      margin: 0 auto 16px;
-    }
-
-    .client-icon svg {
-      width: 100%;
-      height: 100%;
-    }
-
-    .client-icon svg path,
-    .client-icon svg circle,
-    .client-icon svg rect {
-      stroke: #fff;
-      fill: #fff;
-    }
-
-    .client-name {
-      font-size: 1.15rem;
-      font-weight: 700;
-      margin-bottom: 8px;
-      color: #e2f6ff;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .client-platform {
-      font-size: 0.85rem;
-      color: #9fb2c3;
-    }
-
-    .cta-panel {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 60px 32px;
-      text-align: center;
-      background: radial-gradient(circle at top, rgba(0, 204, 255, 0.2), rgba(5, 11, 19, 0.8));
-      border-radius: 24px;
-      border: 1px solid rgba(0, 255, 136, 0.25);
-      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.55);
-      position: relative;
-    }
-
-    .cta-panel::before {
-      content: '';
-      position: absolute;
-      inset: 12px;
-      border-radius: 18px;
-      border: 1px dashed rgba(0, 204, 255, 0.25);
-      pointer-events: none;
-    }
-
-    .cta-panel h2 {
-      font-size: 2.4rem;
-      font-weight: 800;
-      margin-bottom: 16px;
-      background: linear-gradient(120deg, #00ff88 30%, #00ccff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .cta-panel p {
-      font-size: 1.15rem;
-      color: #9fb2c3;
-      margin-bottom: 32px;
-    }
-
-    .cta-icon {
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      border: 1px solid rgba(0, 255, 136, 0.4);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 14px;
-      font-size: 1.5rem;
-      color: #00ff88;
-      animation: float 8s ease-in-out infinite;
-    }
-
-/* Installation - Hacker/Dev Style */
-.install-section {
-  padding: 15px 0 25px;
-}
-
-.install-wrapper {
-  max-width: 900px;
-  margin: 0 auto;
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-  border: 1px solid rgba(0, 255, 136, 0.25);
-  border-radius: 14px;
-  background: rgba(5, 11, 19, 0.8);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
-  position: relative;
-  z-index: 1;
-  overflow: hidden;
-}
-
-.install-command-wrapper {
-  overflow: hidden;
-  border-radius: 0 14px 14px 0;
-}
-
-/* Install tabs for mobile */
-.install-tabs {
-  display: none;
-  flex-direction: row;
-  gap: 0;
-  width: 100%;
-  border: none;
-  background: transparent;
-  border-radius: 0;
-  padding: 0;
-  margin: 0;
-}
-
-.install-tab {
-  flex: 1;
-  padding: 10px 12px;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: #c9d1d9;
-  font-family: 'SF Mono', Monaco, monospace;
-  font-size: 12px;
-  font-weight: 400;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  touch-action: manipulation;
-  text-transform: lowercase;
-  border-radius: 0;
-  position: relative;
-  text-align: left;
-}
-
-.install-tab:hover {
-  background: rgba(13, 17, 23, 0.3);
-  color: #ffffff;
-}
-
-.install-tab.active {
-  background: transparent;
-  color: #00ff88;
-  border-bottom: 2px solid #00ff88;
-}
-
-@media (max-width: 768px) {
-  .install-wrapper {
-    flex-direction: column;
-    border-radius: 18px;
-    border: 1px solid rgba(0, 255, 136, 0.25);
-    overflow: hidden;
-  }
-  
-  /* Show tabs, hide dropdown on mobile */
-  .install-tabs {
-    display: flex;
-    border-radius: 0;
-    background: transparent;
-    border-bottom: 1px solid rgba(48, 54, 61, 0.5);
-    margin: 0;
-    padding: 0;
-  }
-  
-  .install-dropdown {
-    display: none;
-  }
-  
-  .install-command-wrapper {
-    background: #0d1117;
-    border-top: none;
-    border-radius: 0 0 18px 18px;
-    border-left: none;
-    border-right: none;
-  }
-  
-  .install-command-input {
-    border-left: none;
-    border-top: none;
-    border-right: 1px solid #30363d;
-    border-radius: 0;
-    min-height: 48px;
-    background: #0d1117;
-    outline: none !important;
-    -webkit-tap-highlight-color: transparent;
-  }
-  
-  .install-command-input:focus {
-    border-color: #30363d !important;
-    outline: none !important;
-    box-shadow: none !important;
-  }
-  
-  .install-command-wrapper:focus-within .install-command-input {
-    border-color: #30363d !important;
-  }
-  
-  .install-wrapper:focus-within .install-command-input {
-    border-color: #30363d !important;
-  }
-  
-  .install-copy-btn {
-    border-left: none;
-    border-top: none;
-    border-right: none;
-    border-radius: 0 0 18px 0;
-    min-height: 48px;
-    touch-action: manipulation;
-    background: #161b22;
-    outline: none !important;
-    -webkit-tap-highlight-color: transparent;
-  }
-  
-  .install-copy-btn:focus {
-    outline: none !important;
-    box-shadow: none !important;
-    border-color: #30363d !important;
-  }
-  
-  .install-copy-btn:active {
-    outline: none !important;
-    box-shadow: none !important;
-  }
-  
-  .install-wrapper:focus-within .install-copy-btn {
-    border-color: #30363d !important;
-  }
-}
-
-.install-dropdown {
-  position: relative;
-  flex-shrink: 0;
-  z-index: 100;
-}
-
-.install-dropdown-select {
-  min-width: 180px;
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-right: none;
-  border-radius: 12px 0 0 12px;
-  padding: 14px 16px;
-  font-family: 'SF Mono', Monaco, monospace;
-  font-size: 14px;
-  font-weight: 500;
-  color: #c9d1d9;
-  cursor: pointer;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2300ff88' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 14px center;
-  padding-right: 40px;
-  transition: all 0.2s ease;
-  height: 100%;
-  touch-action: manipulation;
-}
-
-.install-wrapper:hover .install-dropdown-select,
-.install-wrapper:hover .install-command-input,
-.install-wrapper:hover .install-copy-btn {
-  border-color: #00ff88;
-}
-
-.install-dropdown-select:hover {
-  background-color: #161b22;
-}
-
-.install-dropdown-select:focus {
-  outline: none;
-  border-color: #00ff88;
-  z-index: 101;
-  position: relative;
-}
-
-.install-command-wrapper {
-  display: flex;
-  flex: 1;
-  align-items: stretch;
-  gap: 0;
-  position: relative;
-}
-
-.install-command-input {
-  flex: 1;
-      background: #0d1117;
-      border: 1px solid #30363d;
-  border-left: none;
-  border-right: none;
-  border-radius: 0;
-  padding: 14px 16px;
-      font-family: 'SF Mono', Monaco, monospace;
-      font-size: 14px;
-      color: #79c0ff;
-  outline: none;
-  transition: all 0.2s ease;
-}
-
-.install-command-input:focus {
-  border-color: #00ff88;
-  z-index: 1;
-}
-
-.install-command-wrapper:focus-within .install-command-input {
-  border-color: #00ff88;
-}
-
-.install-wrapper:focus-within .install-dropdown-select,
-.install-wrapper:focus-within .install-command-input,
-.install-wrapper:focus-within .install-copy-btn {
-  border-color: #00ff88;
-}
-
-.install-copy-btn {
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-left: none;
-  border-radius: 0 12px 12px 0;
-  padding: 14px 24px;
-  font-family: 'SF Mono', Monaco, monospace;
-  font-size: 14px;
-  font-weight: 500;
-  color: #00ff88;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.install-copy-btn:hover {
-  background: #00ff88;
-  color: #0d1117;
-  border-color: #00ff88;
-}
-
-.install-copy-btn.copied {
-  background: #00ff88;
-  color: #0d1117;
-  border-color: #00ff88;
-    }
-
-    /* Comparison */
-    .comparison-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 40px;
-    }
-
-    @media (max-width: 960px) {
-      .comparison-grid { grid-template-columns: 1fr; }
-    }
-
-    .comparison-card {
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 12px;
-      padding: 32px;
-    }
-
-    .comparison-card.cli { border-color: #00ff88; }
-    .comparison-card.tui { border-color: #00ccff; }
-
-    .comparison-title {
-      font-size: 1.8rem;
-      font-weight: 700;
-      margin-bottom: 16px;
-    }
-
-    .comparison-card.cli .comparison-title { color: #00ff88; }
-    .comparison-card.tui .comparison-title { color: #00ccff; }
-
-    .comparison-features {
-      list-style: none;
-    }
-
-    .comparison-features li {
-      padding: 12px 0;
-      padding-left: 24px;
-      position: relative;
-    }
-
-    .comparison-features li:before {
-      content: "✓";
-      color: #00ff88;
-      font-weight: bold;
-      position: absolute;
-      left: 0;
-    }
-
-    .compatibility-note {
-      background: rgba(5, 12, 20, 0.9);
-      border: 1px solid rgba(0, 255, 136, 0.25);
-      border-radius: 18px;
-      padding: 32px;
-      margin-top: 40px;
-      text-align: center;
-      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.5);
-      position: relative;
-    }
-
-    .compatibility-note strong {
-      color: #00ff88;
-      font-size: 1.3rem;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Server Manager - Manage Your MCP Servers</title>
+    <meta name="description" content="The all-in-one CLI tool to manage your MCP servers across Claude, Cursor, Windsurf, and more.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #08090e;
+            --bg-primary: #0c0e16;
+            --bg-secondary: #10121c;
+            --bg-card: #151828;
+            --bg-card-hover: #1a1e32;
+            --text-primary: #e8e6e1;
+            --text-secondary: #7a7b85;
+            --text-muted: #4a4b55;
+            --accent: #e5a525;
+            --accent-light: #ffd166;
+            --accent-glow: rgba(229, 165, 37, 0.15);
+            --teal: #00d4aa;
+            --teal-dim: rgba(0, 212, 170, 0.12);
+            --green: #34d399;
+            --yellow: #fbbf24;
+            --red: #f87171;
+            --border: rgba(255, 255, 255, 0.06);
+            --border-light: rgba(255, 255, 255, 0.1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Dot grid background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 32px 32px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Scroll progress bar */
+        .scroll-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 2px;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent), var(--teal));
+            z-index: 200;
+            transition: width 0.1s linear;
+        }
+
+        /* Ambient glow */
+        .ambient {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+        .ambient::before {
+            content: '';
+            position: absolute;
+            top: -20%;
+            left: 30%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(229, 165, 37, 0.08) 0%, transparent 70%);
+            animation: drift 20s ease-in-out infinite;
+        }
+        .ambient::after {
+            content: '';
+            position: absolute;
+            bottom: 10%;
+            right: 20%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(0, 212, 170, 0.05) 0%, transparent 70%);
+            animation: drift 25s ease-in-out infinite reverse;
+        }
+        @keyframes drift {
+            0%, 100% { transform: translate(0, 0); }
+            33% { transform: translate(40px, -30px); }
+            66% { transform: translate(-30px, 20px); }
+        }
+
+        .container {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 0 28px;
+        }
+
+        /* ── Scroll reveal ── */
+        .reveal {
+            opacity: 0;
+            transform: translateY(32px);
+            transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                        transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Staggered children reveal */
+        .reveal.visible .cmd-card,
+        .reveal.visible .way-card,
+        .reveal.visible .sc {
+            animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        .reveal.visible .cmd-card:nth-child(1),
+        .reveal.visible .way-card:nth-child(1) { animation-delay: 0.05s; }
+        .reveal.visible .cmd-card:nth-child(2),
+        .reveal.visible .way-card:nth-child(2) { animation-delay: 0.1s; }
+        .reveal.visible .cmd-card:nth-child(3) { animation-delay: 0.15s; }
+        .reveal.visible .cmd-card:nth-child(4) { animation-delay: 0.2s; }
+        .reveal.visible .cmd-card:nth-child(5) { animation-delay: 0.25s; }
+        .reveal.visible .cmd-card:nth-child(6) { animation-delay: 0.3s; }
+
+        /* ── Header ── */
+        header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 16px 0;
+            z-index: 100;
+            background: rgba(8, 9, 14, 0.7);
+            backdrop-filter: blur(16px) saturate(1.2);
+            border-bottom: 1px solid var(--border);
+            transition: background 0.3s;
+        }
+
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            letter-spacing: -0.02em;
+        }
+
+        .logo-mark {
+            width: 34px;
+            height: 34px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--teal) 100%);
+            border-radius: 9px;
+            display: grid;
+            place-items: center;
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--bg-deep);
+            position: relative;
+        }
+        .logo-mark::after {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 11px;
+            background: linear-gradient(135deg, var(--accent), var(--teal));
+            z-index: -1;
+            opacity: 0.3;
+            filter: blur(8px);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 28px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 400;
+            transition: color 0.25s;
+            letter-spacing: 0.01em;
+        }
+
+        .nav-links a:hover { color: var(--text-primary); }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            font-size: 0.9rem;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-accent {
+            background: var(--accent);
+            color: var(--bg-deep);
+            box-shadow: 0 0 20px rgba(229, 165, 37, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-accent::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
+            transform: translateX(-100%);
+            transition: transform 0.5s ease;
+        }
+        .btn-accent:hover::before { transform: translateX(100%); }
+        .btn-accent:hover {
+            background: var(--accent-light);
+            box-shadow: 0 0 32px rgba(229, 165, 37, 0.35), 0 4px 16px rgba(229,165,37,0.2);
+            transform: translateY(-2px);
+        }
+
+        .btn-ghost {
+            background: rgba(255,255,255,0.04);
+            color: var(--text-primary);
+            border: 1px solid var(--border-light);
+        }
+        .btn-ghost:hover {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(255,255,255,0.15);
+        }
+
+        /* ── Hero ── */
+        .hero {
+            padding: 180px 0 120px;
+            position: relative;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 100px;
+            right: -50px;
+            width: 300px;
+            height: 300px;
+            border: 1px solid rgba(229,165,37,0.06);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: spin-slow 60s linear infinite;
+        }
+        .hero::after {
+            content: '';
+            position: absolute;
+            top: 160px;
+            right: 10px;
+            width: 200px;
+            height: 200px;
+            border: 1px solid rgba(0,212,170,0.04);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: spin-slow 45s linear infinite reverse;
+        }
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .hero-inner {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 64px;
+            align-items: center;
+        }
+
+        .hero-text { max-width: 540px; }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px 6px 8px;
+            background: var(--accent-glow);
+            border: 1px solid rgba(229, 165, 37, 0.25);
+            border-radius: 100px;
+            font-size: 0.8rem;
+            color: var(--accent-light);
+            font-weight: 500;
+            margin-bottom: 28px;
+            animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+            backdrop-filter: blur(8px);
+            position: relative;
+            overflow: hidden;
+        }
+        .hero-badge::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(229,165,37,0.15), transparent);
+            animation: shimmer 3s ease-in-out infinite;
+        }
+        @keyframes shimmer {
+            0% { left: -100%; }
+            50%, 100% { left: 100%; }
+        }
+        .hero-badge-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(229,165,37,0.4); }
+            50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(229,165,37,0); }
+        }
+
+        .hero h1 {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: clamp(2.8rem, 5vw, 3.8rem);
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            margin-bottom: 24px;
+            animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+        }
+
+        .hero h1 .highlight {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 50%, var(--teal) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero p {
+            font-size: 1.15rem;
+            color: var(--text-secondary);
+            max-width: 460px;
+            line-height: 1.7;
+            font-weight: 300;
+            animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 14px;
+            margin-top: 36px;
+            flex-wrap: wrap;
+            animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both;
+        }
+
+        .install-inline {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 9px 12px 9px 16px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.25s;
+        }
+        .install-inline:hover {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+            color: var(--accent-light);
+        }
+        .install-inline code { color: var(--text-primary); font-weight: 500; }
+        .install-inline .copy-icon {
+            width: 16px;
+            height: 16px;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+        .install-inline:hover .copy-icon { opacity: 1; }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Hero Terminal */
+        .hero-terminal {
+            animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both;
+        }
+
+        .terminal {
+            background: var(--bg-card);
+            border-radius: 14px;
+            border: 1px solid var(--border-light);
+            overflow: hidden;
+            box-shadow:
+                0 4px 6px rgba(0,0,0,0.1),
+                0 24px 48px rgba(0,0,0,0.25),
+                inset 0 1px 0 rgba(255,255,255,0.04);
+            position: relative;
+        }
+        .terminal::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 14px;
+            padding: 1px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 40%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+
+        .terminal-bar {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 13px 16px;
+            background: rgba(0,0,0,0.25);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .terminal-dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+        }
+        .terminal-dot.r { background: #ff5f57; }
+        .terminal-dot.y { background: #febc2e; }
+        .terminal-dot.g { background: #28c840; }
+
+        .terminal-bar-title {
+            flex: 1;
+            text-align: center;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .terminal-body {
+            padding: 20px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.82rem;
+            min-height: 300px;
+            max-height: 340px;
+            overflow-y: auto;
+            line-height: 1.7;
+        }
+
+        .terminal-body::-webkit-scrollbar { width: 6px; }
+        .terminal-body::-webkit-scrollbar-track { background: transparent; }
+        .terminal-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+        /* CRT scanline effect */
+        .terminal::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.03) 2px,
+                rgba(0,0,0,0.03) 4px
+            );
+            pointer-events: none;
+            border-radius: 14px;
+            z-index: 1;
+        }
+
+        /* Terminal glow */
+        .terminal {
+            box-shadow:
+                0 4px 6px rgba(0,0,0,0.1),
+                0 24px 48px rgba(0,0,0,0.25),
+                0 0 80px rgba(229,165,37,0.04),
+                inset 0 1px 0 rgba(255,255,255,0.04);
+        }
+
+        .t-line {
+            display: flex;
+            margin-bottom: 4px;
+            opacity: 0;
+            animation: lineReveal 0.35s ease forwards;
+        }
+        @keyframes lineReveal {
+            from { opacity: 0; transform: translateX(-6px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .t-prompt { color: var(--accent); margin-right: 8px; user-select: none; }
+        .t-cmd { color: var(--text-primary); }
+        .t-out { color: var(--text-secondary); padding-left: 18px; }
+        .t-hl { color: var(--teal); }
+        .t-ok { color: var(--green); }
+        .t-muted { color: var(--text-muted); }
+
+        .t-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 16px;
+            background: var(--accent);
+            animation: blink 1s step-end infinite;
+            vertical-align: text-bottom;
+            margin-left: 2px;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        .t-tui {
+            margin: 8px -20px 0;
+            padding: 16px 20px;
+            background: rgba(0,0,0,0.3);
+            border-top: 1px solid var(--border);
+            line-height: 1.6;
+        }
+        .t-tui-title { color: var(--teal); font-weight: 600; }
+        .t-tui-dim { color: var(--text-muted); font-size: 0.78rem; }
+        .t-tui-section { color: var(--text-primary); font-weight: 600; margin-top: 6px; }
+        .t-tui-row { display: flex; align-items: center; gap: 6px; }
+        .t-tui-arrow { color: var(--accent); font-weight: 600; }
+        .t-tui-check { color: var(--green); }
+        .t-tui-uncheck { color: var(--text-muted); }
+        .t-tui-name { color: var(--text-primary); }
+        .t-tui-name.hl { background: rgba(229,165,37,0.15); padding: 0 4px; border-radius: 3px; }
+        .t-tui-hint { color: var(--text-muted); font-size: 0.72rem; margin-top: 8px; }
+
+        /* ── Section Styling ── */
+        .section-header {
+            text-align: center;
+            margin-bottom: 56px;
+        }
+
+        .section-header h2 {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: clamp(2rem, 4vw, 2.8rem);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 14px;
+        }
+
+        .section-header p {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            font-weight: 300;
+        }
+
+        .section-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--accent);
+            margin-bottom: 16px;
+        }
+        .section-label::before {
+            content: '';
+            display: block;
+            width: 16px;
+            height: 1px;
+            background: var(--accent);
+        }
+
+        /* ── Divider ── */
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border-light) 20%, var(--border-light) 80%, transparent);
+            position: relative;
+        }
+        .divider::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: -3px;
+            width: 6px;
+            height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 12px rgba(229,165,37,0.4);
+        }
+
+        /* ── Two Ways ── */
+        .two-ways {
+            padding: 100px 0;
+            background: var(--bg-primary);
+            position: relative;
+        }
+
+        .ways-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .way-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 36px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .way-card:hover {
+            border-color: rgba(229,165,37,0.2);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2), 0 0 40px rgba(229,165,37,0.05);
+        }
+        .way-card.tui:hover {
+            border-color: rgba(0,212,170,0.2);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2), 0 0 40px rgba(0,212,170,0.05);
+        }
+        .way-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+        .way-card.cli::before { background: linear-gradient(90deg, var(--accent), var(--accent-light)); }
+        .way-card.tui::before { background: linear-gradient(90deg, var(--teal), var(--green)); }
+
+        .way-top {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+
+        .way-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+        }
+        .way-card.cli .way-icon {
+            background: var(--accent-glow);
+            color: var(--accent);
+        }
+        .way-card.tui .way-icon {
+            background: var(--teal-dim);
+            color: var(--teal);
+        }
+
+        .way-top h3 {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .way-tag {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .way-card.cli .way-tag { background: var(--accent-glow); color: var(--accent); }
+        .way-card.tui .way-tag { background: var(--teal-dim); color: var(--teal); }
+
+        .way-card > p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin-bottom: 20px;
+            line-height: 1.7;
+            font-weight: 300;
+        }
+
+        .way-code {
+            background: rgba(0,0,0,0.35);
+            border-radius: 10px;
+            padding: 16px 18px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.8;
+            border: 1px solid var(--border);
+        }
+        .way-code .c { color: var(--accent); }
+        .way-code .a { color: var(--teal); }
+
+        .way-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 16px;
+        }
+        .way-tags span {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        /* ── Features ── */
+        .features {
+            padding: 100px 0;
+            background: var(--bg-deep);
+        }
+
+        .features-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 32px;
+            min-height: 440px;
+        }
+
+        .features-nav {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .feat-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            background: transparent;
+        }
+        .feat-btn:hover { background: rgba(255,255,255,0.02); }
+        .feat-btn.active {
+            background: var(--accent-glow);
+            border-color: rgba(229,165,37,0.2);
+        }
+
+        .feat-btn-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 7px;
+            display: grid;
+            place-items: center;
+            flex-shrink: 0;
+            background: rgba(255,255,255,0.03);
+            transition: all 0.2s;
+        }
+        .feat-btn-icon svg { width: 16px; height: 16px; }
+        .feat-btn.active .feat-btn-icon {
+            background: linear-gradient(135deg, var(--accent), var(--teal));
+        }
+        .feat-btn.active .feat-btn-icon svg { color: var(--bg-deep); stroke: var(--bg-deep); }
+
+        .feat-btn-label {
+            font-size: 0.88rem;
+            font-weight: 400;
+            color: var(--text-secondary);
+            transition: color 0.2s;
+        }
+        .feat-btn.active .feat-btn-label { color: var(--text-primary); font-weight: 500; }
+
+        .feat-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 36px;
+            display: none;
+            animation: panelIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .feat-panel.active { display: block; }
+        @keyframes panelIn {
+            from { opacity: 0; transform: translateY(12px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .feat-panel-head {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            margin-bottom: 20px;
+        }
+        .feat-panel-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, var(--accent), var(--teal));
+            display: grid;
+            place-items: center;
+        }
+        .feat-panel-icon svg { width: 28px; height: 28px; color: var(--bg-deep); stroke: var(--bg-deep); }
+
+        .feat-panel h3 {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            margin-bottom: 4px;
+        }
+
+        .feat-panel-tag {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            padding: 3px 8px;
+            background: var(--accent-glow);
+            color: var(--accent);
+            border-radius: 4px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .feat-panel > p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.8;
+            margin-bottom: 24px;
+            font-weight: 300;
+        }
+
+        .feat-example {
+            background: rgba(0,0,0,0.35);
+            border-radius: 10px;
+            padding: 18px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.9;
+            border: 1px solid var(--border);
+        }
+        .feat-example-label {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+        .feat-example .c { color: var(--accent); }
+        .feat-example .a { color: var(--teal); }
+        .feat-example .m { color: var(--text-muted); }
+
+        /* ── Clients ── */
+        .clients {
+            padding: 80px 0;
+            background: var(--bg-primary);
+            overflow: hidden;
+        }
+
+        .marquee-wrap {
+            margin-top: 40px;
+            position: relative;
+        }
+        .marquee-wrap::before,
+        .marquee-wrap::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100px;
+            z-index: 2;
+            pointer-events: none;
+        }
+        .marquee-wrap::before {
+            left: 0;
+            background: linear-gradient(90deg, var(--bg-primary), transparent);
+        }
+        .marquee-wrap::after {
+            right: 0;
+            background: linear-gradient(270deg, var(--bg-primary), transparent);
+        }
+
+        .marquee-track {
+            display: flex;
+            gap: 40px;
+            animation: marquee 45s linear infinite;
+            width: max-content;
+        }
+        @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        .client-chip {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            white-space: nowrap;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+        .client-chip:hover {
+            border-color: rgba(229,165,37,0.2);
+            background: var(--bg-card-hover);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15), 0 0 20px rgba(229,165,37,0.04);
+            transform: translateY(-2px);
+        }
+
+        .client-chip-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.04);
+            display: grid;
+            place-items: center;
+            overflow: hidden;
+        }
+        .client-chip-icon img {
+            width: 28px;
+            height: 28px;
+            object-fit: contain;
+        }
+
+        .client-chip span {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        /* ── Commands ── */
+        .commands {
+            padding: 100px 0;
+            background: var(--bg-deep);
+        }
+
+        .commands-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .cmd-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 22px;
+            transition: all 0.3s;
+        }
+        .cmd-card:hover {
+            border-color: rgba(229,165,37,0.15);
+            transform: translateY(-3px);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.2), 0 0 20px rgba(229,165,37,0.03);
+        }
+
+        .cmd-card h4 {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-primary);
+        }
+        .cmd-card h4 svg { flex-shrink: 0; }
+
+        .cmd-code {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 14px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.78rem;
+            line-height: 1.8;
+            border: 1px solid var(--border);
+        }
+        .cmd-code .c { color: var(--accent); }
+        .cmd-code .a { color: var(--teal); }
+
+        .commands-foot {
+            text-align: center;
+            margin-top: 36px;
+            padding-top: 28px;
+            border-top: 1px solid var(--border);
+        }
+        .commands-foot p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 12px; }
+        .commands-foot a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: color 0.2s;
+        }
+        .commands-foot a:hover { color: var(--accent-light); }
+
+        /* ── TUI Section ── */
+        .tui-section {
+            padding: 100px 0;
+            background: var(--bg-primary);
+        }
+
+        .tui-layout {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 40px;
+            align-items: center;
+        }
+
+        .tui-mock {
+            background: #0a0d14;
+            border-radius: 14px;
+            border: 1px solid var(--border-light);
+            overflow: hidden;
+            box-shadow:
+                0 4px 6px rgba(0,0,0,0.1),
+                0 24px 48px rgba(0,0,0,0.3),
+                0 0 60px rgba(0,212,170,0.04);
+            position: relative;
+        }
+        .tui-mock::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.02) 2px,
+                rgba(0,0,0,0.02) 4px
+            );
+            pointer-events: none;
+            border-radius: 14px;
+        }
+
+        .tui-mock-bar {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 12px 16px;
+            background: rgba(0,0,0,0.4);
+            border-bottom: 1px solid var(--border);
+        }
+        .tui-mock-bar .terminal-dot { width: 10px; height: 10px; }
+        .tui-mock-bar-title {
+            flex: 1;
+            text-align: center;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .tui-mock-body {
+            padding: 16px 20px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.78rem;
+            line-height: 1.65;
+        }
+        .tui-mock-body .t { color: var(--teal); font-weight: 600; }
+        .tui-mock-body .h { color: var(--text-muted); }
+        .tui-mock-body .w { color: var(--text-primary); font-weight: 600; }
+        .tui-mock-body .srv { display: flex; align-items: center; gap: 6px; }
+        .tui-mock-body .cur { color: var(--accent); font-weight: 600; }
+        .tui-mock-body .chk { color: var(--green); }
+        .tui-mock-body .uchk { color: var(--text-muted); }
+        .tui-mock-body .nm { color: var(--text-primary); }
+        .tui-mock-body .nm.hl { color: var(--accent-light); font-weight: 600; }
+        .tui-mock-body .sok { color: var(--green); }
+        .tui-mock-body .swarn { color: var(--yellow); }
+        .tui-mock-body .serr { color: var(--red); }
+        .tui-mock-body .si { color: var(--text-muted); }
+
+        /* TUI bordered sections */
+        .tui-box {
+            border: 1px solid var(--teal);
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-bottom: 10px;
+        }
+        .tui-box.header-box {
+            border-color: rgba(0,212,170,0.4);
+        }
+        .tui-box.servers-box {
+            border-color: rgba(0,212,170,0.3);
+        }
+        .tui-box-title {
+            color: var(--teal);
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .tui-status-dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            margin: 0 4px;
+            vertical-align: middle;
+        }
+        .tui-helpbar-box {
+            border: 1px solid rgba(0,212,170,0.3);
+            border-radius: 4px;
+            padding: 6px 12px;
+            margin-top: 8px;
+        }
+        .tui-mock-body .tui-helpbar { color: var(--text-muted); font-size: 0.72rem; margin-top: 2px; }
+        .tui-mock-body .tui-helpbar .hk { color: var(--teal); font-weight: 600; }
+        .tui-mock-body .tui-helpbar .dot { color: var(--green); }
+
+        .shortcuts-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 28px;
+        }
+        .shortcuts-panel h4 {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--teal);
+        }
+        .sc-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .sc {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .sc kbd {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid var(--border-light);
+            border-radius: 5px;
+            padding: 5px 9px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            min-width: 32px;
+            text-align: center;
+            color: var(--accent);
+        }
+        .sc span { color: var(--text-secondary); font-size: 0.85rem; }
+
+        /* ── CTA ── */
+        .cta {
+            padding: 120px 0;
+            text-align: center;
+            background: var(--bg-deep);
+            position: relative;
+            overflow: hidden;
+        }
+        .cta::before {
+            content: '';
+            position: absolute;
+            top: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 500px;
+            background: radial-gradient(ellipse, rgba(229,165,37,0.08) 0%, rgba(0,212,170,0.03) 40%, transparent 70%);
+            pointer-events: none;
+            animation: drift 20s ease-in-out infinite;
+        }
+        .cta::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: radial-gradient(circle, rgba(229,165,37,0.02) 1px, transparent 1px);
+            background-size: 24px 24px;
+            pointer-events: none;
+        }
+
+        .cta h2 {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: clamp(2rem, 4vw, 2.6rem);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 14px;
+        }
+
+        .cta > .container > p {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            font-weight: 300;
+            margin-bottom: 32px;
+        }
+
+        .cta-install {
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 20px 14px 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: 12px;
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .cta-install::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 12px;
+            padding: 1px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--teal) 100%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+        .cta-install code {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        .cta-install button {
+            background: var(--accent);
+            color: var(--bg-deep);
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .cta-install button:hover { background: var(--accent-light); }
+
+        /* ── Footer ── */
+        footer {
+            padding: 28px 0;
+            border-top: 1px solid var(--border);
+            text-align: center;
+        }
+        footer p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        footer a:hover { color: var(--accent); }
+
+        /* ── Responsive ── */
+        @media (max-width: 900px) {
+            .hero-inner { grid-template-columns: 1fr; gap: 40px; }
+            .hero-text { max-width: 100%; }
+            .ways-grid { grid-template-columns: 1fr; }
+            .features-layout { grid-template-columns: 1fr; }
+            .features-nav {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+                gap: 6px;
+            }
+            .feat-btn { padding: 8px 10px; }
+            .feat-btn-label { font-size: 0.8rem; }
+            .commands-grid { grid-template-columns: 1fr; }
+            .tui-layout { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 640px) {
+            .hero { padding: 130px 0 80px; }
+            .nav-links { display: none; }
+            .hero h1 { font-size: 2.2rem; }
+            .hero p { font-size: 1rem; }
+            .sc-grid { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
-  <!-- Hero -->
-  <div class="hero">
-    <div class="hero-orb left"></div>
-    <div class="hero-orb right"></div>
-    <div class="container">
-      <div class="hero-content">
-        <div class="hero-kicker">Unified Gateway</div>
-        <h1>Control Every MCP Server from One Unified Gateway</h1>
-        <div class="hero-meta">Built for Model Context Protocol workflows · <a href="https://modelcontextprotocol.io" target="_blank" rel="noreferrer">What is MCP?</a></div>
-        <p>The ultimate CLI & TUI toolkit for Model Context Protocol workflows.</p>
-        <div class="cta-buttons">
-          <a href="https://mateustorquato.github.io/mcp-server-manager/docs/guide/getting-started" class="btn btn-primary">Get Started</a>
-          <a href="https://github.com/MateusTorquato/mcp-server-manager" class="btn btn-secondary">View on GitHub</a>
-        </div>
-      </div>
-    </div>
-  </div>
+    <div class="scroll-progress" id="scrollProgress"></div>
+    <div class="ambient"></div>
 
-  <!-- Installation -->
-  <section class="install-section">
-    <div class="container">
-      <h2 class="section-title">Get Started in Seconds</h2>
-      <p class="section-subtitle">Choose your preferred installation method</p>
-      
-      <div class="install-wrapper">
-        <!-- Tabs for mobile -->
-        <div class="install-tabs">
-          <button class="install-tab active" data-method="npm">npm</button>
-          <button class="install-tab" data-method="bash">bash</button>
-          <button class="install-tab" data-method="powershell">powershell</button>
-        </div>
-        <!-- Dropdown for desktop -->
-        <div class="install-dropdown">
-          <select class="install-dropdown-select" id="install-method">
-            <option value="npm">NPM</option>
-            <option value="bash">Bash</option>
-            <option value="powershell">PowerShell</option>
-          </select>
-        </div>
-        <div class="install-command-wrapper">
-          <input type="text" class="install-command-input" id="install-command" value="npm install -g mcp-server-manager" readonly>
-          <button class="install-copy-btn" id="install-copy-btn" onclick="copyInstallCommand()">Copy</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Terminal Demos -->
-  <section id="terminal-section">
-    <div class="container">
-      <h2 class="section-title">See It In Action</h2>
-      <p class="section-subtitle">Switch between CLI and TUI modes to see both interfaces in action</p>
-      
-      <div class="terminal-toggle-wrapper">
-        <div class="terminal-tabs">
-          <button class="terminal-tab active" data-mode="cli">
-            <span class="tab-icon">⌘</span>
-            <span>CLI Mode</span>
-          </button>
-          <button class="terminal-tab" data-mode="tui">
-            <span class="tab-icon">☰</span>
-            <span>TUI Mode</span>
-          </button>
-        </div>
-        
-        <div class="terminal-container">
-          <div class="terminal-demo active" id="cli-terminal">
-          <div class="terminal-header">
-            <div class="terminal-dot red"></div>
-            <div class="terminal-dot yellow"></div>
-            <div class="terminal-dot green"></div>
-            <div class="terminal-title">Terminal</div>
-          </div>
-          <div class="terminal-body" id="cli-demo"></div>
-        </div>
-
-          <div class="terminal-demo" id="tui-terminal">
-          <div class="terminal-header">
-            <div class="terminal-dot red"></div>
-            <div class="terminal-dot yellow"></div>
-            <div class="terminal-dot green"></div>
-            <div class="terminal-title">Terminal</div>
-          </div>
-          <div class="terminal-body">
-            <div class="tui-screen" id="tui-demo"></div>
+    <header>
+        <nav class="container">
+            <a href="#" class="logo">
+                <div class="logo-mark">M</div>
+                MCPSM
+            </a>
+            <div class="nav-links">
+                <a href="#interfaces">CLI & TUI</a>
+                <a href="#features">Features</a>
+                <a href="#commands">Commands</a>
+                <a href="https://github.com/sardine-ai/mcp-server-manager">GitHub</a>
+                <a href="https://www.npmjs.com/package/mcp-server-manager" class="btn btn-accent">Get Started</a>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
+        </nav>
+    </header>
 
-  <!-- Features -->
-  <section>
-    <div class="container">
-      <h2 class="section-title">Powerful Features</h2>
-      <p class="section-subtitle">Everything you need to manage MCP servers efficiently</p>
-      
-      <div class="features-grid">
-        <div class="feature-card" data-accent="green">
-          <div class="feature-icon" data-icon="⌘"></div>
-          <h3 class="feature-title">Gateway Pattern</h3>
-          <p class="feature-description">Add servers once, connect every client. No more duplicate configs.</p>
-        </div>
-
-        <div class="feature-card" data-accent="cyan">
-          <div class="feature-icon" data-icon="⟳"></div>
-          <h3 class="feature-title">Automatic Sync</h3>
-          <p class="feature-description">Change a port or token once. All clients update instantly.</p>
-        </div>
-
-        <div class="feature-card" data-accent="magenta">
-          <div class="feature-icon" data-icon="✓"></div>
-          <h3 class="feature-title">Built-in Testing</h3>
-          <p class="feature-description">Verify tools and catch auth errors before exposing to agents.</p>
-        </div>
-
-        <div class="feature-card" data-accent="orange">
-          <div class="feature-icon" data-icon="Σ"></div>
-          <h3 class="feature-title">Token Tracking</h3>
-          <p class="feature-description">Monitor context usage to pick the cheapest stack per workflow.</p>
-        </div>
-
-        <div class="feature-card" data-accent="cyan">
-          <div class="feature-icon" data-icon="⚡"></div>
-          <h3 class="feature-title">Real-time Loading</h3>
-          <p class="feature-description">Clients reload configs live. Toggle servers without restarting.</p>
-        </div>
-
-        <div class="feature-card" data-accent="green">
-          <div class="feature-icon" data-icon="⇄"></div>
-          <h3 class="feature-title">Import/Export</h3>
-          <p class="feature-description">Sync profiles across laptops or teammates with one command.</p>
-        </div>
-
-        <div class="feature-card" data-accent="magenta">
-          <div class="feature-icon" data-icon="◎"></div>
-          <h3 class="feature-title">Profiles</h3>
-          <p class="feature-description">Group servers by project. Switch profiles instantly.</p>
-        </div>
-
-        <div class="feature-card" data-accent="orange">
-          <div class="feature-icon" data-icon="∞"></div>
-          <h3 class="feature-title">Daemon Mode</h3>
-          <p class="feature-description">Run as background service with auto-start support.</p>
-        </div>
-
-        <div class="feature-card" data-accent="cyan">
-          <div class="feature-icon" data-icon="🔐"></div>
-          <h3 class="feature-title">OAuth Support</h3>
-          <p class="feature-description">Full OAuth + PKCE flow for enterprise APIs.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Clients -->
-  <section>
-    <div class="container">
-      <h2 class="section-title">Works With All Your Clients</h2>
-      <p class="section-subtitle">Connect once, manage everywhere</p>
-      
-      <div class="clients-panel">
-      <div class="clients-grid">
-        <div class="client-card">
-          <div class="client-icon">
-            <img src="logos/claude-ai-icon.svg" alt="Claude" style="width: 100%; height: 100%; object-fit: contain;">
-          </div>
-          <div class="client-name">Claude</div>
-        </div>
-
-        <div class="client-card">
-          <div class="client-icon">
-            <img src="logos/cursor-ai-code-icon.svg" alt="Cursor" style="width: 100%; height: 100%; object-fit: contain;">
-          </div>
-          <div class="client-name">Cursor</div>
-        </div>
-
-        <div class="client-card">
-          <div class="client-icon">
-            <img src="logos/windsurf-white-symbol.png" alt="Windsurf" style="width: 100%; height: 100%; object-fit: contain;">
-          </div>
-          <div class="client-name">Windsurf</div>
-        </div>
-
-        <div class="client-card">
-          <div class="client-icon">
-            <img src="logos/visual-studio-code-icon.svg" alt="VS Code" style="width: 100%; height: 100%; object-fit: contain;">
-          </div>
-          <div class="client-name">VS Code</div>
-        </div>
-
-        <div class="client-card">
-          <div class="client-icon">
-            <img src="logos/chatgpt-icon.svg" alt="Codex" style="width: 100%; height: 100%; object-fit: contain;">
-          </div>
-          <div class="client-name">Codex</div>
-        </div>
-
-        <div class="client-card">
-          <div class="client-icon">
-            <img src="logos/google-gemini-icon.svg" alt="Gemini CLI" style="width: 100%; height: 100%; object-fit: contain;">
-          </div>
-          <div class="client-name">Gemini CLI</div>
-        </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- CLI + TUI Comparison -->
-  <section>
-    <div class="container">
-      <h2 class="section-title">CLI + TUI: Best of Both Worlds</h2>
-      <p class="section-subtitle">Automate with scripts, inspect visually, all sharing a single source of truth.</p>
-      
-      <div class="comparison-grid">
-        <div class="comparison-card cli">
-          <h3 class="comparison-title">⌨️ CLI</h3>
-          <p style="color: #8b949e; margin-bottom: 24px;">Perfect for automation and scripting</p>
-          <ul class="comparison-features">
-            <li>Direct commands for all operations</li>
-            <li>Scriptable and automatable</li>
-            <li>Batch operations support</li>
-            <li>Profile management and switching</li>
-            <li>AI agent compatible</li>
-            <li>Server testing and validation</li>
-          </ul>
-        </div>
-
-        <div class="comparison-card tui">
-          <h3 class="comparison-title">🖥️ TUI</h3>
-          <p style="color: #8b949e; margin-bottom: 24px;">Perfect for interactive management</p>
-          <ul class="comparison-features">
-            <li>Visual navigation with keyboard shortcuts</li>
-            <li>Real-time status and tool counts</li>
-            <li>Organized menu system</li>
-            <li>Interactive server testing</li>
-            <li>Visual feedback and confirmations</li>
-            <li>Discover features easily</li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="compatibility-note">
-        <strong>◎ Fully Synchronized</strong>
-        <p style="color: #9fb2c3; margin-top: 12px;">
-          Both interfaces work with the same configuration files. Make changes in the CLI, see them in the TUI, and vice versa.
-          The CLI is especially useful for AI agents that need to manage MCP servers programmatically.
-        </p>
-      </div>
-    </div>
-  </section>
-
-
-  <!-- Final CTA -->
-  <section>
-    <div class="container">
-      <div class="cta-panel">
-        <div class="cta-icon">◎</div>
-        <h2>Ready to Simplify Your Workflow?</h2>
-        <p>Join developers managing MCP servers the modern way. Get running in less than 30 seconds.</p>
-        <div class="cta-buttons">
-          <a href="https://mateustorquato.github.io/mcp-server-manager/docs/guide/getting-started" class="btn btn-primary">Get Started</a>
-          <a href="https://github.com/MateusTorquato/mcp-server-manager" class="btn btn-secondary">View on GitHub</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <script>
-    // Animation control - track all active animations
-    let activeTypedInstances = []
-    let activeTimeouts = []
-    
-    function clearAllAnimations() {
-      // Destroy all Typed.js instances
-      activeTypedInstances.forEach(instance => {
-        if (instance && typeof instance.destroy === 'function') {
-          instance.destroy()
-        }
-      })
-      activeTypedInstances = []
-      
-      // Clear all timeouts
-      activeTimeouts.forEach(timeout => {
-        clearTimeout(timeout)
-      })
-      activeTimeouts = []
-    }
-    
-    function addTimeout(callback, delay) {
-      const timeout = setTimeout(() => {
-        activeTimeouts = activeTimeouts.filter(t => t !== timeout)
-        callback()
-      }, delay)
-      activeTimeouts.push(timeout)
-      return timeout
-    }
-    
-    // CLI Animation with Typed.js
-    let cliAnimationInterval = null
-    
-    function animateCLI() {
-      const cliDemo = document.getElementById('cli-demo')
-      if (!cliDemo) return
-      
-      // Clear any existing animations first
-      clearAllAnimations()
-
-      function runCLISequence() {
-        // Clear any existing content
-        cliDemo.innerHTML = ''
-        
-        // Command 1: Add filesystem (STDIO)
-        const line1 = document.createElement('div')
-        line1.style.userSelect = 'text'
-        line1.style.webkitUserSelect = 'text'
-        line1.style.mozUserSelect = 'text'
-        line1.style.msUserSelect = 'text'
-        line1.innerHTML = '<span class="prompt">$ </span><span class="command" id="cmd1"></span>'
-        cliDemo.appendChild(line1)
-        
-        const typed1 = new Typed('#cmd1', {
-          strings: ['mcpsm add filesystem --type stdio --command "npx" --args "-y @modelcontextprotocol/server-filesystem /tmp"'],
-          typeSpeed: 30,
-          showCursor: false,
-          onComplete: () => {
-            addTimeout(() => {
-              const output1 = document.createElement('div')
-              output1.className = 'success'
-              output1.style.userSelect = 'text'
-              output1.style.webkitUserSelect = 'text'
-              output1.style.mozUserSelect = 'text'
-              output1.style.msUserSelect = 'text'
-              output1.textContent = "✓ Added server: filesystem"
-              cliDemo.appendChild(output1)
-              
-              addTimeout(() => {
-                // Command 2: Add asana (SSE)
-                const line2 = document.createElement('div')
-                line2.style.userSelect = 'text'
-                line2.style.webkitUserSelect = 'text'
-                line2.style.mozUserSelect = 'text'
-                line2.style.msUserSelect = 'text'
-                line2.innerHTML = '<span class="prompt">$ </span><span class="command" id="cmd2"></span>'
-                cliDemo.appendChild(line2)
-                
-                const typed2 = new Typed('#cmd2', {
-                  strings: ['mcpsm add asana -t sse https://mcp.asana.com/sse'],
-                  typeSpeed: 30,
-                  showCursor: false,
-                  onComplete: () => {
-                    addTimeout(() => {
-                      const output2 = document.createElement('div')
-                      output2.className = 'output'
-                      output2.style.userSelect = 'text'
-                      output2.style.webkitUserSelect = 'text'
-                      output2.style.mozUserSelect = 'text'
-                      output2.style.msUserSelect = 'text'
-                      output2.textContent = 'Adding server: asana...'
-                      cliDemo.appendChild(output2)
-                      
-                      addTimeout(() => {
-                        const output3 = document.createElement('div')
-                        output3.className = 'success'
-                        output3.style.userSelect = 'text'
-                        output3.style.webkitUserSelect = 'text'
-                        output3.style.mozUserSelect = 'text'
-                        output3.style.msUserSelect = 'text'
-                        output3.textContent = "✓ Added server: asana"
-                        cliDemo.appendChild(output3)
-                        
-                        addTimeout(() => {
-                          const output4 = document.createElement('div')
-                          output4.className = 'output'
-                          output4.style.color = '#ffa500'
-                          output4.style.userSelect = 'text'
-                          output4.style.webkitUserSelect = 'text'
-                          output4.style.mozUserSelect = 'text'
-                          output4.style.msUserSelect = 'text'
-                          output4.textContent = '⚠ Waiting for authentication...'
-                          cliDemo.appendChild(output4)
-                          
-                          addTimeout(() => {
-                            const finalLine = document.createElement('div')
-                            finalLine.style.userSelect = 'text'
-                            finalLine.style.webkitUserSelect = 'text'
-                            finalLine.style.mozUserSelect = 'text'
-                            finalLine.style.msUserSelect = 'text'
-                            finalLine.innerHTML = '<span class="prompt">$ </span><span class="cursor-blink"></span>'
-                            cliDemo.appendChild(finalLine)
-                          }, 1500)
-                        }, 300)
-                      }, 400)
-                    }, 300)
-                  }
-                })
-                activeTypedInstances.push(typed2)
-              }, 500)
-            }, 300)
-          }
-        })
-        activeTypedInstances.push(typed1)
-      }
-      
-      runCLISequence()
-    }
-
-    // Version (pulled from package.json when available)
-    let APP_VERSION = "";
-    (async () => {
-      const candidates = [
-        "https://raw.githubusercontent.com/MateusTorquato/mcp-server-manager/main/package.json",
-        "../package.json",
-        "./package.json",
-        "/package.json",
-      ];
-      for (const url of candidates) {
-        try {
-          const res = await fetch(url, { cache: "no-store" });
-          if (!res.ok) continue;
-          const pkg = await res.json();
-          if (pkg?.version) {
-            APP_VERSION = pkg.version;
-            break;
-          }
-        } catch (err) {
-          console.debug("Version fetch failed for", url, err);
-        }
-      }
-    })();
-
-    // TUI Animation with typing and keypress indicators
-    let tuiAnimationInterval = null
-    let tuiStep = 0
-    
-    function animateTUI() {
-      const tuiDemo = document.getElementById('tui-demo')
-      if (!tuiDemo) return
-      
-      // Clear any existing animations first
-      clearAllAnimations()
-      
-      // Reset step counter
-      tuiStep = 0
-      
-      // Helper function to render TUI main screen
-      function renderTUIScreen(servers, selectedIndex) {
-        const versionLabel = APP_VERSION ? ` v${APP_VERSION}` : "";
-        const shortcuts = '<strong style="color: #8b949e;">Shortcuts:</strong> <span style="color: #00ff88;">↑↓</span> Navigate • <span style="color: #00ff88;">Space</span> Toggle • <span style="color: #00ff88;">A</span> Add • <span style="color: #00ff88;">C</span> Clients'
-        
-        let serversHTML = servers.map((server, index) => {
-          const isSelected = index === selectedIndex
-          const cursor = isSelected ? '<span class="tui-cursor">→</span> ' : ''
-          const enabled = server.enabled ? '[✓]' : '[ ]'
-          
-          let status
-          if (!server.enabled) {
-            status = `<span style="color: #ffa500;">disabled</span> <span style="color: #8b949e;">${server.tools} tools · ${server.tokens} tokens</span>`
-          } else if (server.tools === '0/0' && server.needsAuth) {
-            status = `<span style="color: #ffa500;">— needs auth</span>`
-          } else if (server.tools === '0/0') {
-            status = `<span style="color: #00ff88;">✓</span> <span style="color: #ffa657;">${server.tools} tools · ${server.tokens} tokens</span>`
-          } else {
-            status = `<span style="color: #00ff88;">✓</span> <span style="color: #ffa657;">${server.tools} tools · ${server.tokens} tokens</span>`
-          }
-          
-          const selectedClass = isSelected ? ' selected' : ''
-          
-          return `<div class="tui-server-item${selectedClass}">${cursor}${enabled} <strong>${server.name}</strong> ${status}</div>`
-        }).join('\n            ')
-        
-        return `
-          <div class="tui-header">
-            <div class="tui-title">MCP Server Manager${versionLabel}</div>
-            <div class="tui-subtitle">Profile: default | Port: 8850 | Total: 8.6k tokens</div>
-          </div>
-          <div class="tui-panel">
-            <div class="tui-panel-title">Servers</div>
-            ${serversHTML}
-          </div>
-          <div class="tui-shortcuts">${shortcuts}</div>
-        `
-      }
-      
-      // Add floating key indicator style
-      const style = document.createElement('style')
-      style.textContent = `
-        .floating-key {
-          position: absolute;
-          right: 20px;
-          top: 20px;
-          background: #00ff88;
-          color: #0d1117;
-          padding: 10px 14px;
-          border-radius: 8px;
-          font-weight: bold;
-          font-size: 18px;
-          box-shadow: 0 4px 16px rgba(0, 255, 136, 0.6);
-          animation: keyPress 0.6s ease-out;
-          z-index: 10;
-          min-width: 44px;
-          text-align: center;
-          border: 2px solid #00cc66;
-        }
-        @keyframes keyPress {
-          0% { transform: scale(0.8); opacity: 0; }
-          50% { transform: scale(1.15); }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        .tui-container {
-          position: relative;
-          width: 100%;
-          height: 100%;
-          min-height: 550px;
-        }
-        .tui-dialog {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          background: #0d1117;
-          border: 1px solid #00ccff;
-          border-radius: 4px;
-          padding: 0;
-          width: 600px;
-          max-width: calc(100% - 80px);
-          z-index: 1000;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
-        }
-        .tui-dialog-header {
-          border-bottom: 1px solid #30363d;
-          padding: 12px 16px;
-        }
-        .tui-dialog-title {
-          color: #00ccff;
-          font-weight: bold;
-          font-size: 16px;
-        }
-        .tui-dialog-body {
-          padding: 16px;
-        }
-        .tui-dialog-label {
-          color: #8b949e;
-          font-size: 14px;
-          margin-bottom: 8px;
-        }
-        .tui-dialog-prompt {
-          color: #00ff88;
-          font-family: 'SF Mono', Monaco, monospace;
-          margin-right: 4px;
-        }
-        .tui-dialog-input-line {
-          display: flex;
-          align-items: center;
-          margin-top: 8px;
-          word-break: break-all;
-        }
-        .tui-dialog-input-text {
-          color: #c9d1d9;
-          font-family: 'SF Mono', Monaco, monospace;
-          font-size: 14px;
-          white-space: pre-wrap;
-          word-break: break-all;
-        }
-        .tui-dialog-menu {
-          margin-top: 8px;
-        }
-        .tui-dialog-menu-item {
-          padding: 4px 0;
-          color: #8b949e;
-          font-size: 14px;
-        }
-        .tui-dialog-menu-item.selected {
-          color: #00ccff;
-        }
-        .tui-dialog-menu-item.selected::before {
-          content: '❯ ';
-          color: #00ccff;
-        }
-        .tui-dialog-menu-item:not(.selected)::before {
-          content: '  ';
-        }
-        .tui-dialog-result {
-          margin-top: 16px;
-        }
-        .tui-dialog-result-success {
-          color: #00ff88;
-        }
-        .tui-dialog-result-error {
-          color: #ff7b72;
-        }
-        .tui-dialog-footer {
-          border-top: 1px solid #30363d;
-          padding: 12px 16px;
-          color: #8b949e;
-          font-size: 12px;
-        }
-      `
-      document.head.appendChild(style)
-      
-      // Define servers list
-      const servers = [
-        { name: 'filesystem', enabled: true, tools: '0/0', tokens: '0.0k', needsAuth: false },
-        { name: 'deepwiki', enabled: true, tools: '3/3', tokens: '284', needsAuth: false },
-        { name: 'datadog', enabled: true, tools: '0/0', tokens: '0.0k', needsAuth: true }
-      ]
-      
-      function showStep() {
-        tuiDemo.innerHTML = ''
-        const container = document.createElement('div')
-        container.className = 'tui-container'
-        container.style.position = 'absolute'
-        container.style.top = '0'
-        container.style.left = '0'
-        container.style.width = '100%'
-        container.style.height = '100%'
-        tuiDemo.appendChild(container)
-        
-        if (tuiStep === 0) {
-          // Step 1: Show terminal with command being typed
-          container.innerHTML = `
-            <div style="font-family: 'SF Mono', Monaco, monospace; color: #8b949e;">
-              <div><span style="color: #00ff88;">$ </span><span class="command" id="tui-cmd"></span><span class="cursor-blink"></span></div>
-</div>
-          `
-          const typedTuiCmd = new Typed('#tui-cmd', {
-            strings: ['mcpsm'],
-            typeSpeed: 50,
-            showCursor: false,
-            onComplete: () => {
-              addTimeout(() => {
-                tuiStep = 1
-                showStep()
-              }, 800)
-            }
-          })
-          activeTypedInstances.push(typedTuiCmd)
-        } else if (tuiStep === 1) {
-          // Step 2: TUI starts loading
-          container.innerHTML = renderTUIScreen(servers, 0)
-          container.style.opacity = '0'
-          container.style.animation = 'fadeIn 0.5s forwards'
-          addTimeout(() => {
-            tuiStep = 2
-            showStep()
-          }, 2000)
-        } else if (tuiStep === 2) {
-          // Step 3: Press Arrow Down
-          const keyIndicator = document.createElement('div')
-          keyIndicator.className = 'floating-key'
-          keyIndicator.textContent = '↓'
-          container.appendChild(keyIndicator)
-          
-          container.innerHTML = renderTUIScreen(servers, 1)
-          container.appendChild(keyIndicator)
-          
-          addTimeout(() => {
-            keyIndicator.style.opacity = '0'
-            addTimeout(() => {
-              tuiStep = 3
-              showStep()
-            }, 500)
-          }, 1500)
-        } else if (tuiStep === 3) {
-          // Step 4: Press Arrow Down again
-          const keyIndicator = document.createElement('div')
-          keyIndicator.className = 'floating-key'
-          keyIndicator.textContent = '↓'
-          container.appendChild(keyIndicator)
-          
-          container.innerHTML = renderTUIScreen(servers, 2)
-          container.appendChild(keyIndicator)
-          
-          addTimeout(() => {
-            keyIndicator.style.opacity = '0'
-            addTimeout(() => {
-              tuiStep = 4
-              showStep()
-            }, 500)
-          }, 1500)
-        } else if (tuiStep === 4) {
-          // Step 5: Press Arrow Up - select deepwiki
-          const keyIndicator = document.createElement('div')
-          keyIndicator.className = 'floating-key'
-          keyIndicator.textContent = '↑'
-          container.appendChild(keyIndicator)
-          
-          // Select deepwiki (index 1)
-          container.innerHTML = renderTUIScreen(servers, 1)
-          container.appendChild(keyIndicator)
-          
-          addTimeout(() => {
-            keyIndicator.style.opacity = '0'
-            addTimeout(() => {
-              tuiStep = 5
-              showStep()
-            }, 500)
-          }, 1500)
-        } else if (tuiStep === 5) {
-          // Step 6: Press Space to toggle deepwiki (disable it)
-          const keyIndicator = document.createElement('div')
-          keyIndicator.className = 'floating-key'
-          keyIndicator.textContent = 'Space'
-          container.appendChild(keyIndicator)
-          
-          const toggledServers = [...servers]
-          // Disable deepwiki (index 1)
-          toggledServers[1].enabled = false
-          container.innerHTML = renderTUIScreen(toggledServers, 1)
-          container.appendChild(keyIndicator)
-          
-          addTimeout(() => {
-            keyIndicator.style.opacity = '0'
-            addTimeout(() => {
-              tuiStep = 6
-              showStep()
-            }, 500)
-          }, 1500)
-        } else if (tuiStep === 6) {
-          // Step 7: Press 'A' to add server
-          const keyIndicator = document.createElement('div')
-          keyIndicator.className = 'floating-key'
-          keyIndicator.textContent = 'A'
-          container.appendChild(keyIndicator)
-          
-          container.innerHTML = renderTUIScreen(servers, 1)
-          container.appendChild(keyIndicator)
-          
-          addTimeout(() => {
-            keyIndicator.style.opacity = '0'
-            addTimeout(() => {
-              tuiStep = 7
-              showStep()
-            }, 500)
-          }, 1500)
-        } else if (tuiStep === 7) {
-          // Step 8: Show Add Server dialog - Server name
-          container.innerHTML = `
-            <div class="tui-dialog">
-              <div class="tui-dialog-header">
-                <div class="tui-dialog-title">Add New MCP Server</div>
-</div>
-              <div class="tui-dialog-body">
-                <div class="tui-dialog-label">Server name:</div>
-                <div class="tui-dialog-input-line">
-                  <span class="tui-dialog-prompt">></span>
-                  <span class="tui-dialog-input-text" id="server-name-input"></span>
-                  <span class="cursor-blink"></span>
-  </div>
-</div>
-              <div class="tui-dialog-footer">ESC to go back</div>
-</div>
-          `
-          
-          const typedServerName = new Typed('#server-name-input', {
-            strings: ['asana'],
-            typeSpeed: 50,
-            showCursor: false,
-            onComplete: () => {
-              addTimeout(() => {
-                tuiStep = 8
-                showStep()
-              }, 800)
-            }
-          })
-          activeTypedInstances.push(typedServerName)
-        } else if (tuiStep === 8) {
-          // Step 9: Server type selection - start with Local selected
-          const keyIndicator = document.createElement('div')
-          keyIndicator.className = 'floating-key'
-          keyIndicator.textContent = '↓'
-          container.appendChild(keyIndicator)
-          
-          container.innerHTML = `
-            <div class="tui-dialog">
-              <div class="tui-dialog-header">
-                <div class="tui-dialog-title">Add New MCP Server</div>
-</div>
-              <div class="tui-dialog-body">
-                <div class="tui-dialog-label">Server type:</div>
-                <div class="tui-dialog-menu">
-                  <div class="tui-dialog-menu-item selected">Local (STDIO) - Run MCP servers locally</div>
-                  <div class="tui-dialog-menu-item">Remote (HTTP) - Connect to hosted servers</div>
-                  <div class="tui-dialog-menu-item">Remote (SSE) - Real-time streaming</div>
-  </div>
-  </div>
-              <div class="tui-dialog-footer">ESC to go back</div>
-</div>
-          `
-          container.appendChild(keyIndicator)
-        
-        addTimeout(() => {
-            keyIndicator.style.opacity = '0'
-            addTimeout(() => {
-              tuiStep = 9
-              showStep()
-            }, 500)
-          }, 1200)
-        } else if (tuiStep === 9) {
-          // Step 10: Navigate to Remote (HTTP)
-          const keyIndicator = document.createElement('div')
-          keyIndicator.className = 'floating-key'
-          keyIndicator.textContent = '↓'
-          container.appendChild(keyIndicator)
-          
-          container.innerHTML = `
-            <div class="tui-dialog">
-              <div class="tui-dialog-header">
-                <div class="tui-dialog-title">Add New MCP Server</div>
-  </div>
-              <div class="tui-dialog-body">
-                <div class="tui-dialog-label">Server type:</div>
-                <div class="tui-dialog-menu">
-                  <div class="tui-dialog-menu-item">Local (STDIO) - Run MCP servers locally</div>
-                  <div class="tui-dialog-menu-item selected">Remote (HTTP) - Connect to hosted servers</div>
-                  <div class="tui-dialog-menu-item">Remote (SSE) - Real-time streaming</div>
-</div>
-</div>
-              <div class="tui-dialog-footer">ESC to go back</div>
-  </div>
-          `
-          container.appendChild(keyIndicator)
-          
-          addTimeout(() => {
-            keyIndicator.style.opacity = '0'
-            addTimeout(() => {
-              tuiStep = 10
-              showStep()
-            }, 500)
-          }, 1200)
-        } else if (tuiStep === 10) {
-          // Step 11: Navigate to Remote (SSE) - final selection
-          const keyIndicator = document.createElement('div')
-          keyIndicator.className = 'floating-key'
-          keyIndicator.textContent = '↓'
-          container.appendChild(keyIndicator)
-          
-          container.innerHTML = `
-            <div class="tui-dialog">
-              <div class="tui-dialog-header">
-                <div class="tui-dialog-title">Add New MCP Server</div>
-  </div>
-              <div class="tui-dialog-body">
-                <div class="tui-dialog-label">Server type:</div>
-                <div class="tui-dialog-menu">
-                  <div class="tui-dialog-menu-item">Local (STDIO) - Run MCP servers locally</div>
-                  <div class="tui-dialog-menu-item">Remote (HTTP) - Connect to hosted servers</div>
-                  <div class="tui-dialog-menu-item selected">Remote (SSE) - Real-time streaming</div>
-  </div>
-</div>
-              <div class="tui-dialog-footer">ESC to go back</div>
-  </div>
-          `
-          container.appendChild(keyIndicator)
-          
-          addTimeout(() => {
-            keyIndicator.style.opacity = '0'
-            addTimeout(() => {
-              tuiStep = 11
-              showStep()
-            }, 500)
-          }, 1200)
-        } else if (tuiStep === 11) {
-          // Step 12: Enter URL for SSE
-          container.innerHTML = `
-            <div class="tui-dialog">
-              <div class="tui-dialog-header">
-                <div class="tui-dialog-title">Add New MCP Server</div>
-  </div>
-              <div class="tui-dialog-body">
-                <div class="tui-dialog-label">Server URL:</div>
-                <div class="tui-dialog-input-line">
-                  <span class="tui-dialog-prompt">></span>
-                  <span class="tui-dialog-input-text" id="server-url-input"></span>
-                  <span class="cursor-blink"></span>
-</div>
-              </div>
-              <div class="tui-dialog-footer">ESC to go back</div>
-            </div>
-          `
-          
-          const typedServerUrl = new Typed('#server-url-input', {
-            strings: ['https://mcp.asana.com/sse'],
-            typeSpeed: 30,
-            showCursor: false,
-            onComplete: () => {
-              addTimeout(() => {
-                tuiStep = 12
-                showStep()
-              }, 800)
-            }
-          })
-          activeTypedInstances.push(typedServerUrl)
-        } else if (tuiStep === 12) {
-          // Step 13: Server added result
-          container.innerHTML = `
-            <div class="tui-dialog">
-              <div class="tui-dialog-header">
-                <div class="tui-dialog-title">Add New MCP Server</div>
-              </div>
-              <div class="tui-dialog-body">
-                <div class="tui-dialog-result">
-                  <div class="tui-dialog-result-success">✓ Server 'asana' added!</div>
+    <main>
+        <!-- Hero -->
+        <section class="hero">
+            <div class="container">
+                <div class="hero-inner">
+                    <div class="hero-text">
+                        <div class="hero-badge">
+                            <span class="hero-badge-dot"></span>
+                            Open Source CLI & TUI Tool
+                        </div>
+                        <h1>Manage Your <span class="highlight">MCP Servers</span> Across All Clients</h1>
+                        <p>The all-in-one tool to manage, test, and sync MCP servers across Claude Desktop, Cursor, Windsurf, VS Code, and more.</p>
+                        <div class="hero-actions">
+                            <a href="https://www.npmjs.com/package/mcp-server-manager" class="btn btn-accent">Install Now</a>
+                            <a href="https://github.com/sardine-ai/mcp-server-manager" class="btn btn-ghost">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                                GitHub
+                            </a>
+                        </div>
+                        <div class="hero-actions" style="margin-top: 16px;">
+                            <div class="install-inline" onclick="copyInstall(this)">
+                                <code>npm i -g mcp-server-manager</code>
+                                <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="hero-terminal">
+                        <div class="terminal">
+                            <div class="terminal-bar">
+                                <div class="terminal-dot r"></div>
+                                <div class="terminal-dot y"></div>
+                                <div class="terminal-dot g"></div>
+                                <div class="terminal-bar-title">Terminal</div>
+                            </div>
+                            <div class="terminal-body" id="terminal"></div>
+                        </div>
+                    </div>
                 </div>
-              </div>
-              <div class="tui-dialog-footer">Press any key to continue...</div>
             </div>
-          `
-          
-          addTimeout(() => {
-            tuiStep = 13
-            showStep()
-          }, 2000)
-        } else if (tuiStep === 13) {
-          // Step 14: Back to main view with new server
-          const newServers = [...servers, { name: 'asana', enabled: true, tools: '43/43', tokens: '43.0k', needsAuth: false }]
-          container.innerHTML = renderTUIScreen(newServers, newServers.length - 1)
-        
-        addTimeout(() => {
-            tuiStep = 0
-            showStep()
-          }, 3000)
+        </section>
+
+        <div class="divider"></div>
+
+        <!-- Two Ways -->
+        <section class="two-ways" id="interfaces">
+            <div class="container">
+                <div class="section-header reveal">
+                    <div class="section-label">Interfaces</div>
+                    <h2>Two Ways to Use</h2>
+                    <p>Choose the interface that fits your workflow</p>
+                </div>
+                <div class="ways-grid reveal">
+                    <div class="way-card cli">
+                        <div class="way-top">
+                            <div class="way-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                            </div>
+                            <div>
+                                <h3>CLI</h3>
+                                <span class="way-tag">Command Line</span>
+                            </div>
+                        </div>
+                        <p>Perfect for automation, scripts, and quick one-off commands. Integrate with CI/CD pipelines or run directly from your terminal.</p>
+                        <div class="way-code">
+                            <span class="c">mcpsm</span> <span class="a">list</span> --json<br>
+                            <span class="c">mcpsm</span> <span class="a">test</span> filesystem<br>
+                            <span class="c">mcpsm</span> <span class="a">clients connect</span> claude
+                        </div>
+                        <div class="way-tags">
+                            <span>Scriptable</span>
+                            <span>JSON output</span>
+                            <span>CI/CD ready</span>
+                            <span>Fast</span>
+                        </div>
+                    </div>
+                    <div class="way-card tui">
+                        <div class="way-top">
+                            <div class="way-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                            </div>
+                            <div>
+                                <h3>Interactive TUI</h3>
+                                <span class="way-tag">Terminal UI</span>
+                            </div>
+                        </div>
+                        <p>Full-featured terminal interface with keyboard navigation. Manage servers, clients, profiles, and settings visually.</p>
+                        <div class="way-code">
+                            <span class="c">$</span> mcpsm<br><br>
+                            <span style="color: var(--text-primary); font-weight:600;">MCP Server Manager v2.4.1</span> <span style="color: var(--green);">●</span> <span style="color: var(--teal);">Healthy</span><br>
+                            <span style="color: var(--text-muted);">Profile: ◄ Default ► │ Port: 8850</span><br><br>
+                            <span style="color: var(--accent);">→</span> <span style="color: var(--text-muted);">[ ]</span> <span style="color: var(--accent-light);">browsermcp</span> <span style="color: var(--green);">✓</span> <span style="color: var(--text-muted);">12/12 tools</span><br>
+                            <span style="color: var(--text-muted);">&nbsp;&nbsp;</span><span style="color: var(--green);">[✓]</span> deepwiki <span style="color: var(--green);">✓</span> <span style="color: var(--text-muted);">3/3 tools</span>
+                        </div>
+                        <div class="way-tags">
+                            <span>Visual</span>
+                            <span>Keyboard shortcuts</span>
+                            <span>Status badges</span>
+                            <span>Multi-screen</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <!-- Features -->
+        <section class="features" id="features">
+            <div class="container">
+                <div class="section-header reveal">
+                    <div class="section-label">Capabilities</div>
+                    <h2>Everything You Need</h2>
+                    <p>One tool to rule all your MCP servers</p>
+                </div>
+                <div class="features-layout reveal">
+                    <div class="features-nav">
+                        <div class="feat-btn active" data-feature="sync">
+                            <div class="feat-btn-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9m-9 9a9 9 0 0 1 9-9"/></svg></div>
+                            <span class="feat-btn-label">Multi-Client Sync</span>
+                        </div>
+                        <div class="feat-btn" data-feature="testing">
+                            <div class="feat-btn-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg></div>
+                            <span class="feat-btn-label">Parallel Testing</span>
+                        </div>
+                        <div class="feat-btn" data-feature="discovery">
+                            <div class="feat-btn-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg></div>
+                            <span class="feat-btn-label">Tool Discovery</span>
+                        </div>
+                        <div class="feat-btn" data-feature="tokens">
+                            <div class="feat-btn-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg></div>
+                            <span class="feat-btn-label">Token Counting</span>
+                        </div>
+                        <div class="feat-btn" data-feature="filtering">
+                            <div class="feat-btn-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg></div>
+                            <span class="feat-btn-label">Tool Filtering</span>
+                        </div>
+                        <div class="feat-btn" data-feature="profiles">
+                            <div class="feat-btn-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                            <span class="feat-btn-label">Profiles</span>
+                        </div>
+                        <div class="feat-btn" data-feature="import">
+                            <div class="feat-btn-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div>
+                            <span class="feat-btn-label">Import & Export</span>
+                        </div>
+                        <div class="feat-btn" data-feature="remote">
+                            <div class="feat-btn-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+                            <span class="feat-btn-label">Remote Servers</span>
+                        </div>
+                        <div class="feat-btn" data-feature="oauth">
+                            <div class="feat-btn-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+                            <span class="feat-btn-label">OAuth Support</span>
+                        </div>
+                        <div class="feat-btn" data-feature="daemon">
+                            <div class="feat-btn-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m6.8 14-3.5 2"/><path d="m20.7 16-3.5-2"/><path d="M6.8 10 3.3 8"/><path d="m20.7 8-3.5 2"/><circle cx="12" cy="12" r="6"/></svg></div>
+                            <span class="feat-btn-label">Daemon Mode</span>
+                        </div>
+                    </div>
+                    <div class="features-panels">
+                        <div class="feat-panel active" data-feature="sync">
+                            <div class="feat-panel-head">
+                                <div class="feat-panel-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9m-9 9a9 9 0 0 1 9-9"/></svg></div>
+                                <div>
+                                    <h3>Multi-Client Sync</h3>
+                                    <span class="feat-panel-tag">Core</span>
+                                </div>
+                            </div>
+                            <p>Sync your MCP servers to Claude Desktop, Cursor, Windsurf, VS Code, Claude Code, Kiro, Codex, Gemini CLI, Zed and more. No more manually editing JSON config files.</p>
+                            <div class="feat-example">
+                                <div class="feat-example-label">Client Commands</div>
+                                <span class="c">mcpsm</span> <span class="a">clients list</span> <span class="m"># See all detected clients</span><br>
+                                <span class="c">mcpsm</span> <span class="a">clients connect claude</span> <span class="m"># Connect a client</span><br>
+                                <span class="c">mcpsm</span> <span class="a">clients connect cursor</span> <span class="m"># Connect specific client</span><br>
+                                <span class="c">mcpsm</span> <span class="a">clients disconnect windsurf</span> <span class="m"># Disconnect a client</span><br>
+                                <span class="c">mcpsm</span> <span class="a">clients open cursor</span> <span class="m"># Open client's config file</span>
+                            </div>
+                        </div>
+                        <div class="feat-panel" data-feature="testing">
+                            <div class="feat-panel-head">
+                                <div class="feat-panel-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg></div>
+                                <div>
+                                    <h3>Parallel Testing</h3>
+                                    <span class="feat-panel-tag">Reliability</span>
+                                </div>
+                            </div>
+                            <p>Test all your servers simultaneously with parallel execution. See which ones are working, failing, or timing out before you use them in your AI client.</p>
+                            <div class="feat-example">
+                                <div class="feat-example-label">Testing Commands</div>
+                                <span class="c">mcpsm</span> <span class="a">test</span> <span class="m"># Test all servers</span><br>
+                                <span class="c">mcpsm</span> <span class="a">test my-server</span> <span class="m"># Test specific server</span><br>
+                                <span class="c">mcpsm</span> <span class="a">test --json</span> <span class="m"># JSON output with details</span><br>
+                                <span class="c">mcpsm</span> <span class="a">doctor</span> <span class="m"># Full health check</span>
+                            </div>
+                        </div>
+                        <div class="feat-panel" data-feature="discovery">
+                            <div class="feat-panel-head">
+                                <div class="feat-panel-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg></div>
+                                <div>
+                                    <h3>Tool Discovery</h3>
+                                    <span class="feat-panel-tag">Visibility</span>
+                                </div>
+                            </div>
+                            <p>Automatically discover all tools from your MCP servers. See tool names, descriptions, input schemas, and token costs before enabling.</p>
+                            <div class="feat-example">
+                                <div class="feat-example-label">Discovery Commands</div>
+                                <span class="c">mcpsm</span> <span class="a">tools list</span> <span class="m"># List all discovered tools</span><br>
+                                <span class="c">mcpsm</span> <span class="a">tools discover my-server</span> <span class="m"># Discover tools from server</span><br>
+                                <span class="c">mcpsm</span> <span class="a">tools list --json</span> <span class="m"># Full tool schemas as JSON</span><br>
+                                <span class="c">mcpsm</span> <span class="a">list --tokens</span> <span class="m"># Show token counts per server</span>
+                            </div>
+                        </div>
+                        <div class="feat-panel" data-feature="tokens">
+                            <div class="feat-panel-head">
+                                <div class="feat-panel-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg></div>
+                                <div>
+                                    <h3>Token Counting</h3>
+                                    <span class="feat-panel-tag">Cost Control</span>
+                                </div>
+                            </div>
+                            <p>Track context usage per server and tool. Know exactly how many tokens your MCP tools consume in the system prompt. Optimize by identifying heavy tools.</p>
+                            <div class="feat-example">
+                                <div class="feat-example-label">Token Commands</div>
+                                <span class="c">mcpsm</span> <span class="a">tokens</span> <span class="m"># Summary of token usage</span><br>
+                                <span class="c">mcpsm</span> <span class="a">tokens --detailed</span> <span class="m"># Per-tool breakdown</span><br>
+                                <span class="c">mcpsm</span> <span class="a">tokens --json</span> <span class="m"># JSON format</span><br>
+                                <span class="c">mcpsm</span> <span class="a">list --tokens</span> <span class="m"># Token counts in server list</span>
+                            </div>
+                        </div>
+                        <div class="feat-panel" data-feature="filtering">
+                            <div class="feat-panel-head">
+                                <div class="feat-panel-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg></div>
+                                <div>
+                                    <h3>Tool Filtering</h3>
+                                    <span class="feat-panel-tag">Optimization</span>
+                                </div>
+                            </div>
+                            <p>Enable or disable specific tools per server. Reduce token usage by hiding tools you don't need. Keep your AI context lean and focused.</p>
+                            <div class="feat-example">
+                                <div class="feat-example-label">Filtering Commands</div>
+                                <span class="c">mcpsm</span> <span class="a">tools list my-server</span> <span class="m"># List tools for server</span><br>
+                                <span class="c">mcpsm</span> <span class="a">tools disable my-server tool-name</span> <span class="m"># Disable a tool</span><br>
+                                <span class="c">mcpsm</span> <span class="a">tools enable my-server tool-name</span> <span class="m"># Enable a tool</span><br>
+                                <span class="c">mcpsm</span> <span class="a">tools enable my-server</span> <span class="m"># Enable all tools</span>
+                            </div>
+                        </div>
+                        <div class="feat-panel" data-feature="profiles">
+                            <div class="feat-panel-head">
+                                <div class="feat-panel-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                                <div>
+                                    <h3>Profiles</h3>
+                                    <span class="feat-panel-tag">Organization</span>
+                                </div>
+                            </div>
+                            <p>Group servers by project or context. Create profiles for work, personal, or project-specific setups. Switch between configurations instantly.</p>
+                            <div class="feat-example">
+                                <div class="feat-example-label">Profile Commands</div>
+                                <span class="c">mcpsm</span> <span class="a">profile list</span> <span class="m"># List all profiles</span><br>
+                                <span class="c">mcpsm</span> <span class="a">profile create work</span> <span class="m"># Create new profile</span><br>
+                                <span class="c">mcpsm</span> <span class="a">profile use work</span> <span class="m"># Switch to profile</span><br>
+                                <span class="c">mcpsm</span> <span class="a">profile add work my-server</span> <span class="m"># Add server to profile</span><br>
+                                <span class="c">mcpsm</span> <span class="a">profile delete old-profile</span> <span class="m"># Delete profile</span>
+                            </div>
+                        </div>
+                        <div class="feat-panel" data-feature="import">
+                            <div class="feat-panel-head">
+                                <div class="feat-panel-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div>
+                                <div>
+                                    <h3>Import & Export</h3>
+                                    <span class="feat-panel-tag">Migration</span>
+                                </div>
+                            </div>
+                            <p>Migrate configs between machines or import servers from existing client configurations. Already have servers in Claude Desktop or Cursor? Import them directly.</p>
+                            <div class="feat-example">
+                                <div class="feat-example-label">Import/Export Commands</div>
+                                <span class="c">mcpsm</span> <span class="a">import --from claude</span> <span class="m"># Import from Claude Desktop</span><br>
+                                <span class="c">mcpsm</span> <span class="a">import --from cursor</span> <span class="m"># Import from Cursor</span><br>
+                                <span class="c">mcpsm</span> <span class="a">import backup.json</span> <span class="m"># Import from file</span><br>
+                                <span class="c">mcpsm</span> <span class="a">export --output backup.json</span> <span class="m"># Export all servers</span><br>
+                                <span class="c">mcpsm</span> <span class="a">export --format claude</span> <span class="m"># Export in Claude format</span>
+                            </div>
+                        </div>
+                        <div class="feat-panel" data-feature="remote">
+                            <div class="feat-panel-head">
+                                <div class="feat-panel-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+                                <div>
+                                    <h3>Remote Servers</h3>
+                                    <span class="feat-panel-tag">Connectivity</span>
+                                </div>
+                            </div>
+                            <p>Connect to HTTP and SSE remote MCP servers. Full support for bearer tokens, custom headers, and various authentication methods.</p>
+                            <div class="feat-example">
+                                <div class="feat-example-label">Remote Server Commands</div>
+                                <span class="c">mcpsm</span> <span class="a">add --type http</span> <span class="m"># Add HTTP remote server</span><br>
+                                <span class="c">mcpsm</span> <span class="a">add --type sse</span> <span class="m"># Add SSE remote server</span><br>
+                                <span class="m"># During add, you can specify:</span><br>
+                                <span class="m"># - URL: https://api.example.com/mcp</span><br>
+                                <span class="m"># - Bearer token for authentication</span><br>
+                                <span class="m"># - Custom headers (key: value pairs)</span>
+                            </div>
+                        </div>
+                        <div class="feat-panel" data-feature="oauth">
+                            <div class="feat-panel-head">
+                                <div class="feat-panel-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+                                <div>
+                                    <h3>OAuth Support</h3>
+                                    <span class="feat-panel-tag">Security</span>
+                                </div>
+                            </div>
+                            <p>Built-in OAuth 2.0 flow with PKCE for remote servers that require authentication. Securely authenticate with enterprise MCP services.</p>
+                            <div class="feat-example">
+                                <div class="feat-example-label">OAuth Commands</div>
+                                <span class="c">mcpsm</span> <span class="a">auth login my-remote-server</span> <span class="m"># Start OAuth flow</span><br>
+                                <span class="c">mcpsm</span> <span class="a">auth logout my-remote-server</span> <span class="m"># Revoke tokens</span><br>
+                                <span class="c">mcpsm</span> <span class="a">auth status</span> <span class="m"># Check auth status</span><br>
+                                <span class="c">mcpsm</span> <span class="a">auth refresh my-remote-server</span> <span class="m"># Refresh tokens</span>
+                            </div>
+                        </div>
+                        <div class="feat-panel" data-feature="daemon">
+                            <div class="feat-panel-head">
+                                <div class="feat-panel-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m6.8 14-3.5 2"/><path d="m20.7 16-3.5-2"/><path d="M6.8 10 3.3 8"/><path d="m20.7 8-3.5 2"/><circle cx="12" cy="12" r="6"/></svg></div>
+                                <div>
+                                    <h3>Daemon Mode</h3>
+                                    <span class="feat-panel-tag">Background</span>
+                                </div>
+                            </div>
+                            <p>Run the MCP gateway in background with auto-start on system boot. Set it up once and forget it. Your servers are always available.</p>
+                            <div class="feat-example">
+                                <div class="feat-example-label">Daemon Commands</div>
+                                <span class="c">mcpsm</span> <span class="a">daemon start</span> <span class="m"># Start the daemon</span><br>
+                                <span class="c">mcpsm</span> <span class="a">daemon stop</span> <span class="m"># Stop the daemon</span><br>
+                                <span class="c">mcpsm</span> <span class="a">daemon status</span> <span class="m"># Check daemon status</span><br>
+                                <span class="c">mcpsm</span> <span class="a">daemon startup enable</span> <span class="m"># Auto-start on boot</span><br>
+                                <span class="c">mcpsm</span> <span class="a">daemon logs --follow</span> <span class="m"># View daemon logs</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <!-- Clients -->
+        <section class="clients">
+            <div class="container">
+                <div class="section-header reveal">
+                    <div class="section-label">Integrations</div>
+                    <h2>Works With Your Favorite Clients</h2>
+                    <p>Automatically detect and sync to all major MCP clients</p>
+                </div>
+            </div>
+            <div class="marquee-wrap reveal">
+                <div class="marquee-track">
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/claude-ai-icon.svg" alt="Claude Desktop"></div><span>Claude Desktop</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/cursor-ai-code-icon.svg" alt="Cursor"></div><span>Cursor</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/windsurf-white.svg" alt="Windsurf"></div><span>Windsurf</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/kiro-icon.svg" alt="Kiro"></div><span>Kiro</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/visual-studio-code-icon.svg" alt="VS Code"></div><span>VS Code</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/claude-ai-icon.svg" alt="Claude Code"></div><span>Claude Code</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/chatgpt-icon.svg" alt="Codex CLI"></div><span>Codex CLI</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/google-gemini-icon.svg" alt="Gemini CLI"></div><span>Gemini CLI</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/zed-icon.svg" alt="Zed"></div><span>Zed</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/antigravity-icon.svg" alt="Antigravity"></div><span>Antigravity</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/opencode-icon.svg" alt="OpenCode"></div><span>OpenCode</span></div>
+                    <!-- Duplicate for seamless loop -->
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/claude-ai-icon.svg" alt="Claude Desktop"></div><span>Claude Desktop</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/cursor-ai-code-icon.svg" alt="Cursor"></div><span>Cursor</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/windsurf-white.svg" alt="Windsurf"></div><span>Windsurf</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/kiro-icon.svg" alt="Kiro"></div><span>Kiro</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/visual-studio-code-icon.svg" alt="VS Code"></div><span>VS Code</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/claude-ai-icon.svg" alt="Claude Code"></div><span>Claude Code</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/chatgpt-icon.svg" alt="Codex CLI"></div><span>Codex CLI</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/google-gemini-icon.svg" alt="Gemini CLI"></div><span>Gemini CLI</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/zed-icon.svg" alt="Zed"></div><span>Zed</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/antigravity-icon.svg" alt="Antigravity"></div><span>Antigravity</span></div>
+                    <div class="client-chip"><div class="client-chip-icon"><img src="logos/opencode-icon.svg" alt="OpenCode"></div><span>OpenCode</span></div>
+                </div>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <!-- Commands -->
+        <section class="commands" id="commands">
+            <div class="container">
+                <div class="section-header reveal">
+                    <div class="section-label">Reference</div>
+                    <h2>CLI Commands</h2>
+                    <p>Scriptable commands for automation and quick tasks</p>
+                </div>
+                <div class="commands-grid reveal">
+                    <div class="cmd-card">
+                        <h4><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>Server Management</h4>
+                        <div class="cmd-code">
+                            <span class="c">mcpsm</span> <span class="a">list</span><br>
+                            <span class="c">mcpsm</span> <span class="a">add</span> myserver --type stdio<br>
+                            <span class="c">mcpsm</span> <span class="a">test</span><br>
+                            <span class="c">mcpsm</span> <span class="a">remove</span> myserver
+                        </div>
+                    </div>
+                    <div class="cmd-card">
+                        <h4><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9m-9 9a9 9 0 0 1 9-9"/></svg>Client Sync</h4>
+                        <div class="cmd-code">
+                            <span class="c">mcpsm</span> <span class="a">clients list</span><br>
+                            <span class="c">mcpsm</span> <span class="a">clients connect</span> claude<br>
+                            <span class="c">mcpsm</span> <span class="a">clients disconnect</span> cursor
+                        </div>
+                    </div>
+                    <div class="cmd-card">
+                        <h4><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Import & Export</h4>
+                        <div class="cmd-code">
+                            <span class="c">mcpsm</span> <span class="a">import</span> --from claude<br>
+                            <span class="c">mcpsm</span> <span class="a">export</span> --output backup.json
+                        </div>
+                    </div>
+                    <div class="cmd-card">
+                        <h4><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Profiles</h4>
+                        <div class="cmd-code">
+                            <span class="c">mcpsm</span> <span class="a">profile create</span> work<br>
+                            <span class="c">mcpsm</span> <span class="a">profile use</span> work
+                        </div>
+                    </div>
+                    <div class="cmd-card">
+                        <h4><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m6.8 14-3.5 2"/><path d="m20.7 16-3.5-2"/><path d="M6.8 10 3.3 8"/><path d="m20.7 8-3.5 2"/><circle cx="12" cy="12" r="6"/></svg>Daemon</h4>
+                        <div class="cmd-code">
+                            <span class="c">mcpsm</span> <span class="a">daemon start</span><br>
+                            <span class="c">mcpsm</span> <span class="a">daemon status</span><br>
+                            <span class="c">mcpsm</span> <span class="a">daemon startup</span> enable
+                        </div>
+                    </div>
+                    <div class="cmd-card">
+                        <h4><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</h4>
+                        <div class="cmd-code">
+                            <span class="c">mcpsm</span> <span class="a">settings</span><br>
+                            <span class="c">mcpsm</span> <span class="a">settings set</span> port 9000<br>
+                            <span class="c">mcpsm</span> <span class="a">doctor</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="commands-foot">
+                    <p>Plus: tools, auth, tokens, logs, config, and many more commands</p>
+                    <a href="./docs/">
+                        View full documentation
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <!-- TUI -->
+        <section class="tui-section" id="tui">
+            <div class="container">
+                <div class="section-header reveal">
+                    <div class="section-label">Interface</div>
+                    <h2>Interactive TUI</h2>
+                    <p>Visual terminal interface with keyboard navigation</p>
+                </div>
+                <div class="tui-layout reveal">
+                    <div class="tui-mock">
+                        <div class="tui-mock-bar">
+                            <div class="terminal-dot r"></div>
+                            <div class="terminal-dot y"></div>
+                            <div class="terminal-dot g"></div>
+                            <div class="tui-mock-bar-title">mcpsm</div>
+                        </div>
+                        <div class="tui-mock-body">
+                            <div class="tui-box header-box">
+                                <div><span class="w">MCP Server Manager v2.4.1</span> <span class="tui-status-dot"></span> <span class="t">Healthy (16 srv, 291 tools)</span></div>
+                                <div><span class="h">Profile: ◄</span> <span class="t">Default</span> <span class="h">► │ Port: 8850 │ Total: 142.8K tokens</span></div>
+                            </div>
+                            <div class="tui-box servers-box">
+                                <div class="tui-box-title">Servers</div>
+                                <br>
+                                <div class="srv"><span class="cur">→</span> <span class="uchk">[ ]</span> <span class="nm hl">browsermcp</span> <span class="sok">✓</span> <span class="h">12/12 tools · 1.1K tokens</span></div>
+                                <div class="srv"><span class="h">&nbsp;&nbsp;</span> <span class="uchk">[ ]</span> <span class="nm">gemini-mcp-tool</span> <span class="sok">✓</span> <span class="h">6/6 tools · 939 tokens</span></div>
+                                <div class="srv"><span class="h">&nbsp;&nbsp;</span> <span class="uchk">[ ]</span> <span class="nm">brave-search</span> <span class="sok">✓</span> <span class="h">2/2 tools · 363 tokens</span></div>
+                                <div class="srv"><span class="h">&nbsp;&nbsp;</span> <span class="uchk">[ ]</span> <span class="nm">filesystem</span> <span class="sok">✓</span> <span class="h">14/14 tools · 3.1K tokens</span></div>
+                                <div class="srv"><span class="h">&nbsp;&nbsp;</span> <span class="uchk">[ ]</span> <span class="nm">fetch</span> <span class="sok">✓</span> <span class="h">1/1 tools · 276 tokens</span></div>
+                                <div class="srv"><span class="h">&nbsp;&nbsp;</span> <span class="uchk">[ ]</span> <span class="nm">playwright</span> <span class="sok">✓</span> <span class="h">22/22 tools · 3.5K tokens</span></div>
+                                <div class="srv"><span class="h">&nbsp;&nbsp;</span> <span class="chk">[✓]</span> <span class="nm">deepwiki</span> <span class="sok">✓</span> <span class="h">3/3 tools · 384 tokens</span></div>
+                                <div class="srv"><span class="h">&nbsp;&nbsp;</span> <span class="uchk">[ ]</span> <span class="nm">datadog</span> <span class="sok">✓</span> <span class="h">18/20 tools · 12.8K tokens</span></div>
+                                <div class="srv"><span class="h">&nbsp;&nbsp;</span> <span class="uchk">[ ]</span> <span class="nm">stripe</span> <span class="sok">✓</span> <span class="h">28/28 tools · 8.3K tokens</span></div>
+                                <div class="srv"><span class="h">&nbsp;&nbsp;</span> <span class="uchk">[ ]</span> <span class="nm">notion</span> <span class="sok">✓</span> <span class="h">14/16 tools · 11.1K tokens</span></div>
+                                <div class="srv"><span class="h">&nbsp;&nbsp;</span> <span class="uchk">[ ]</span> <span class="nm">postman-minimal</span> <span class="sok">✓</span> <span class="h">40/40 tools · 30.5K tokens · </span><span class="serr">HTTP 401</span></div>
+                                <div class="srv"><span class="h">&nbsp;&nbsp;</span> <span class="uchk">[ ]</span> <span class="nm">figma-desktop</span> <span class="sok">✓</span> <span class="h">6/6 tools · 2.7K tokens · </span><span class="serr">fetch failed</span></div>
+                                <div><span class="h">↓</span></div>
+                            </div>
+                            <div class="tui-helpbar-box">
+                                <div class="tui-helpbar"><span class="dot">•</span><span class="hk">↑↓</span> Navigate <span class="dot">•</span><span class="hk">←→</span> Profile <span class="dot">•</span><span class="hk">Space</span> Toggle <span class="dot">•</span><span class="hk">Enter</span> Daemon <span class="dot">•</span><span class="hk">A</span> Add <span class="dot">•</span><span class="hk">E</span> Edit <span class="dot">•</span><span class="hk">D</span> Del <span class="dot">•</span><span class="hk">X</span> Test <span class="dot">•</span><span class="hk">T</span> Tools</div>
+                                <div class="tui-helpbar"><span class="dot">•</span><span class="hk">F</span> Profiles <span class="dot">•</span><span class="hk">I</span> Import <span class="dot">•</span><span class="hk">C</span> Clients <span class="dot">•</span><span class="hk">G</span> Settings <span class="dot">•</span><span class="hk">H</span> Doctor <span class="dot">•</span><span class="hk">O</span> Auth <span class="dot">•</span><span class="hk">Q</span> Quit</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="shortcuts-panel">
+                        <h4>Keyboard Shortcuts</h4>
+                        <div class="sc-grid">
+                            <div class="sc"><kbd>↑↓</kbd><span>Navigate</span></div>
+                            <div class="sc"><kbd>←→</kbd><span>Switch profile</span></div>
+                            <div class="sc"><kbd>Space</kbd><span>Toggle server</span></div>
+                            <div class="sc"><kbd>Enter</kbd><span>Daemon control</span></div>
+                            <div class="sc"><kbd>A</kbd><span>Add server</span></div>
+                            <div class="sc"><kbd>E</kbd><span>Edit server</span></div>
+                            <div class="sc"><kbd>D</kbd><span>Delete server</span></div>
+                            <div class="sc"><kbd>X</kbd><span>Test all servers</span></div>
+                            <div class="sc"><kbd>T</kbd><span>Tools screen</span></div>
+                            <div class="sc"><kbd>C</kbd><span>Clients screen</span></div>
+                            <div class="sc"><kbd>F</kbd><span>Profiles screen</span></div>
+                            <div class="sc"><kbd>I</kbd><span>Import/Export</span></div>
+                            <div class="sc"><kbd>G</kbd><span>Settings screen</span></div>
+                            <div class="sc"><kbd>H</kbd><span>Doctor / Health</span></div>
+                            <div class="sc"><kbd>O</kbd><span>Auth screen</span></div>
+                            <div class="sc"><kbd>Q</kbd><span>Quit</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <!-- CTA -->
+        <section class="cta">
+            <div class="container">
+                <div class="reveal">
+                    <h2>Ready to Get Started?</h2>
+                    <p>Install MCP Server Manager and take control of your servers</p>
+                    <div class="cta-install">
+                        <code>npm install -g mcp-server-manager</code>
+                        <button onclick="copyInstallCTA()">Copy</button>
+                    </div>
+                    <div>
+                        <a href="./docs/" class="btn btn-ghost">Read the Docs</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>MIT License &copy; 2025 <a href="https://github.com/sardine-ai">Sardine AI</a></p>
+        </div>
+    </footer>
+
+    <script>
+        // ── Terminal Animation ──
+        const lines = [
+            { t: 'cmd', v: 'npm install -g mcp-server-manager' },
+            { t: 'out', v: '+ mcp-server-manager@2.4.1' },
+            { t: 'out', v: '' },
+            { t: 'out', v: '<span class="t-hl"># CLI mode - quick commands</span>' },
+            { t: 'cmd', v: 'mcpsm list' },
+            { t: 'out', v: '  <span class="t-ok">*</span> filesystem   (11 tools)' },
+            { t: 'out', v: '  <span class="t-ok">*</span> github       (8 tools)' },
+            { t: 'out', v: '  <span class="t-ok">*</span> postgres     (5 tools)' },
+            { t: 'cmd', v: 'mcpsm test' },
+            { t: 'out', v: '<span class="t-ok">PASS</span> All servers OK (3/3)' },
+            { t: 'out', v: '' },
+            { t: 'out', v: '<span class="t-hl"># TUI mode - interactive interface</span>' },
+            { t: 'cmd', v: 'mcpsm' },
+            { t: 'tui', v: '' },
+        ];
+
+        const tuiBlock = `<div class="t-tui">
+  <div style="border:1px solid rgba(0,212,170,0.4);border-radius:4px;padding:6px 10px;margin-bottom:8px;">
+    <div><span class="t-tui-name" style="font-weight:600;">MCP Server Manager v2.4.1</span> <span style="color:#34d399;">●</span> <span class="t-tui-title">Healthy (16 srv, 291 tools)</span></div>
+    <div class="t-tui-dim">Profile: ◄ <span class="t-tui-title">Default</span> <span class="t-tui-dim">► │ Port: 8850 │ Total: 142.8K tokens</span></div>
+  </div>
+  <div style="border:1px solid rgba(0,212,170,0.3);border-radius:4px;padding:6px 10px;margin-bottom:8px;">
+    <div class="t-tui-title" style="margin-bottom:4px;">Servers</div>
+    <div class="t-tui-row"><span class="t-tui-arrow">→</span> <span class="t-tui-dim">[ ]</span> <span class="t-tui-name hl">browsermcp</span> <span style="color:#34d399;">✓</span> <span class="t-tui-dim">12/12 tools · 1.1K tokens</span></div>
+    <div class="t-tui-row">  <span class="t-tui-dim">[ ]</span> <span class="t-tui-name">filesystem</span> <span style="color:#34d399;">✓</span> <span class="t-tui-dim">14/14 tools · 3.1K tokens</span></div>
+    <div class="t-tui-row">  <span style="color:#34d399;">[✓]</span> <span class="t-tui-name">deepwiki</span> <span style="color:#34d399;">✓</span> <span class="t-tui-dim">3/3 tools · 384 tokens</span></div>
+    <div class="t-tui-row">  <span class="t-tui-dim">[ ]</span> <span class="t-tui-name">stripe</span> <span style="color:#34d399;">✓</span> <span class="t-tui-dim">28/28 tools · 8.3K tokens</span></div>
+    <div class="t-tui-row">  <span class="t-tui-dim">[ ]</span> <span class="t-tui-name">notion</span> <span style="color:#34d399;">✓</span> <span class="t-tui-dim">14/16 tools · 11.1K tokens</span></div>
+  </div>
+  <div style="border:1px solid rgba(0,212,170,0.3);border-radius:4px;padding:4px 10px;">
+    <div class="t-tui-hint"><span style="color:#34d399;">•</span><span style="color:#00d4aa;">↑↓</span> Navigate <span style="color:#34d399;">•</span><span style="color:#00d4aa;">Space</span> Toggle <span style="color:#34d399;">•</span><span style="color:#00d4aa;">A</span> Add <span style="color:#34d399;">•</span><span style="color:#00d4aa;">D</span> Del <span style="color:#34d399;">•</span><span style="color:#00d4aa;">X</span> Test <span style="color:#34d399;">•</span><span style="color:#00d4aa;">Q</span> Quit</div>
+  </div>
+</div>`;
+
+        function animateTerminal() {
+            const el = document.getElementById('terminal');
+            el.innerHTML = '';
+            lines.forEach((line, i) => {
+                setTimeout(() => {
+                    const div = document.createElement('div');
+                    div.className = 't-line';
+                    div.style.animationDelay = `${i * 0.08}s`;
+                    if (line.t === 'cmd') {
+                        div.innerHTML = `<span class="t-prompt">$</span><span class="t-cmd">${line.v}</span>`;
+                    } else if (line.t === 'tui') {
+                        div.style.display = 'block';
+                        div.innerHTML = tuiBlock;
+                    } else {
+                        div.innerHTML = `<span class="t-out">${line.v}</span>`;
+                    }
+                    el.appendChild(div);
+                    el.scrollTop = el.scrollHeight;
+                }, i * 500);
+            });
         }
-      }
-      
-      showStep()
-    }
 
-    // Install dropdown functionality
-    const installCommands = {
-      npm: 'npm install -g mcp-server-manager',
-      bash: 'curl -fsSL https://raw.githubusercontent.com/MateusTorquato/mcp-server-manager/main/scripts/install.sh | bash',
-      powershell: 'irm https://raw.githubusercontent.com/MateusTorquato/mcp-server-manager/main/scripts/install.ps1 | iex'
-    }
+        // ── Copy handlers ──
+        function copyInstall(btn) {
+            navigator.clipboard.writeText('npm i -g mcp-server-manager');
+            const code = btn.querySelector('code');
+            const orig = code.textContent;
+            code.textContent = 'Copied!';
+            setTimeout(() => code.textContent = orig, 1500);
+        }
 
-    function copyInstallCommand() {
-      const input = document.getElementById('install-command')
-      input.select()
-      input.setSelectionRange(0, 99999) // For mobile devices
-      
-      try {
-        document.execCommand('copy')
-        const btn = document.getElementById('install-copy-btn')
-        const originalText = btn.textContent
-        btn.textContent = 'Copied!'
-        btn.classList.add('copied')
-        
-        setTimeout(() => {
-          btn.textContent = originalText
-          btn.classList.remove('copied')
-        }, 2000)
-      } catch (err) {
-        console.error('Failed to copy:', err)
-      }
-    }
+        function copyInstallCTA() {
+            navigator.clipboard.writeText('npm install -g mcp-server-manager');
+            const btn = document.querySelector('.cta-install button');
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Copy', 1500);
+        }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const dropdown = document.getElementById('install-method')
-      const commandInput = document.getElementById('install-command')
-      const installTabs = document.querySelectorAll('.install-tab')
-      
-      // Dropdown handler (desktop)
-      if (dropdown) {
-        dropdown.addEventListener('change', (e) => {
-          const method = e.target.value
-          commandInput.value = installCommands[method]
-          // Update tabs if visible
-          installTabs.forEach(tab => {
-            if (tab.dataset.method === method) {
-              tab.classList.add('active')
-            } else {
-              tab.classList.remove('active')
-            }
-          })
-        })
-      }
-      
-      // Tabs handler (mobile)
-      installTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-          const method = tab.dataset.method
-          commandInput.value = installCommands[method]
-          
-          // Update active tab
-          installTabs.forEach(t => t.classList.remove('active'))
-          tab.classList.add('active')
-          
-          // Update dropdown if visible
-          if (dropdown) {
-            dropdown.value = method
-          }
-        })
-      })
+        // ── Scroll progress ──
+        window.addEventListener('scroll', () => {
+            const scrollTop = document.documentElement.scrollTop;
+            const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / scrollHeight) * 100;
+            document.getElementById('scrollProgress').style.width = progress + '%';
+        });
 
-      // Terminal toggle functionality
-      const terminalTabs = document.querySelectorAll('.terminal-tab')
-      const cliTerminal = document.getElementById('cli-terminal')
-      const tuiTerminal = document.getElementById('tui-terminal')
-      const cliDemo = document.getElementById('cli-demo')
-      const tuiDemo = document.getElementById('tui-demo')
+        // ── Features interactive ──
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(animateTerminal, 400);
 
-      terminalTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-          const mode = tab.getAttribute('data-mode')
-          
-          // Update tabs
-          terminalTabs.forEach(t => t.classList.remove('active'))
-          tab.classList.add('active')
-          
-          // Update terminals and restart animations
-          if (mode === 'cli') {
-            cliTerminal.classList.add('active')
-            tuiTerminal.classList.remove('active')
-            // Restart CLI animation
-            if (cliDemo) {
-              cliDemo.innerHTML = ''
-              animateCLI()
-            }
-          } else {
-            tuiTerminal.classList.add('active')
-            cliTerminal.classList.remove('active')
-            // Restart TUI animation
-            if (tuiDemo) {
-              tuiDemo.innerHTML = ''
-              tuiStep = 0
-              animateTUI()
-            }
-          }
-        })
-      })
-      
-      // Start CLI animation when section becomes visible
-      const terminalSection = document.getElementById('terminal-section')
-      if (terminalSection && cliDemo) {
-        const observer = new IntersectionObserver((entries) => {
-          entries.forEach(entry => {
-            if (entry.isIntersecting) {
-              // Section is visible, start animation
-              if (cliDemo && !cliDemo.hasAttribute('data-animation-started')) {
-                cliDemo.setAttribute('data-animation-started', 'true')
-                animateCLI()
-              }
-              // Stop observing once animation has started
-              observer.unobserve(entry.target)
-            }
-          })
-        }, {
-          threshold: 0.2 // Start when 20% of the section is visible
-        })
-        
-        observer.observe(terminalSection)
-      }
-    })
-  </script>
+            const btns = document.querySelectorAll('.feat-btn');
+            const panels = document.querySelectorAll('.feat-panel');
+            btns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.feature;
+                    btns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    panels.forEach(p => p.classList.remove('active'));
+                    const panel = document.querySelector(`.feat-panel[data-feature="${id}"]`);
+                    if (panel) panel.classList.add('active');
+                });
+            });
+
+            // Scroll reveal
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                    }
+                });
+            }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+            document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+        });
+    </script>
 </body>
 </html>

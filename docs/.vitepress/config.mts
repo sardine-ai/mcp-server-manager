@@ -85,12 +85,12 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: "github", link: "https://github.com/MateusTorquato/mcp-server-manager" },
+      { icon: "github", link: "https://github.com/sardine-ai/mcp-server-manager" },
     ],
 
     footer: {
       message: "Released under the MIT License.",
-      copyright: "Copyright © 2025 Mateus Torquato",
+      copyright: "Copyright © 2025 Sardine AI",
     },
 
     search: {
@@ -98,7 +98,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: "https://github.com/MateusTorquato/mcp-server-manager/edit/main/docs/:path",
+      pattern: "https://github.com/sardine-ai/mcp-server-manager/edit/main/docs/:path",
       text: "Edit this page on GitHub",
     },
   },

@@ -382,6 +382,16 @@ export function ProfilesScreen({ onBack }: ProfilesScreenProps): React.ReactElem
         profiles.map((profile, idx) => {
           const isCurrent = idx === currentIndex;
           const serverInfo = profile.includesAll ? "all servers" : `${profile.serverCount} server(s)`;
+          const showId = profile.id !== profile.name.toLowerCase().replace(/\s+/g, "-");
+          const profileServers = profileService.getServersForProfile(profile.id);
+          const serverNames: string[] = [];
+          if (profileServers) {
+            profileServers.servers.forEach((s) => serverNames.push(s.name));
+            profileServers.remoteServers.forEach((s) => serverNames.push(s.name));
+          }
+          const maxPreview = 4;
+          const previewNames = serverNames.slice(0, maxPreview);
+          const remaining = serverNames.length - maxPreview;
 
           return (
             <Box key={profile.id} flexDirection="column" marginBottom={1}>
@@ -390,11 +400,17 @@ export function ProfilesScreen({ onBack }: ProfilesScreenProps): React.ReactElem
                 <Text color={isCurrent ? theme.colors.highlightText : undefined} bold={isCurrent}>
                   {profile.name}
                 </Text>
-                <Text dimColor>[{profile.id}]</Text>
-              </Box>
-              <Box marginLeft={4}>
+                {showId && <Text dimColor>[{profile.id}]</Text>}
+                {profile.isActive && <Text color={theme.colors.success}>(active)</Text>}
                 <Text dimColor>{serverInfo}</Text>
               </Box>
+              {previewNames.length > 0 && (
+                <Box marginLeft={4}>
+                  <Text dimColor>
+                    {previewNames.join(", ")}{remaining > 0 ? `, +${remaining} more` : ""}
+                  </Text>
+                </Box>
+              )}
             </Box>
           );
         })

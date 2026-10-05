@@ -9,11 +9,13 @@ import { useTheme } from "../theme/index.js";
 interface VersionBannerProps {
   currentVersion: string;
   latestVersion: string;
+  installCommand: string;
 }
 
 export function VersionBanner({
   currentVersion,
   latestVersion,
+  installCommand,
 }: VersionBannerProps): React.ReactElement {
   const { theme } = useTheme();
 
@@ -36,7 +38,7 @@ export function VersionBanner({
       </Text>
       <Text dimColor>|</Text>
       <Text dimColor>Run:</Text>
-      <Text color={theme.colors.accent}>npm install -g mcp-server-manager</Text>
+      <Text color={theme.colors.accent}>{installCommand}</Text>
     </Box>
   );
 }

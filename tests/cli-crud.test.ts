@@ -69,7 +69,7 @@ describe("CLI CRUD flows with sardine config", () => {
 
   it("edits, removes, and re-adds a remote server and redacts tokens in JSON output", () => {
     execSync(
-      `${CLI} edit devin --name devin-updated --url https://mcp.devin.ai/updated --token NEW_TOKEN`,
+      `${CLI} edit devin --name devin-updated --url https://mcp.devin.ai/updated --token NEW_TOKEN --header X-Org-Id=org_JVU8h2dxO575yI66`,
       {
         cwd: process.cwd(),
         env: cliEnv(),
@@ -83,6 +83,7 @@ describe("CLI CRUD flows with sardine config", () => {
     expect(edited.name).toBe("devin-updated");
     expect(edited.url).toBe("https://mcp.devin.ai/updated");
     expect(edited.bearerToken).toBe("NEW_TOKEN");
+    expect(edited.headers).toEqual({ "X-Org-Id": "org_JVU8h2dxO575yI66" });
 
     execSync(`${CLI} remove devin --yes`, {
       cwd: process.cwd(),
@@ -92,16 +93,20 @@ describe("CLI CRUD flows with sardine config", () => {
     config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     expect(config.remoteServers.find((s: any) => s.id === "devin")).toBeUndefined();
 
-    execSync(`${CLI} add devin -t sse -u https://mcp.devin.ai/sse --token RESTORED_TOKEN`, {
-      cwd: process.cwd(),
-      env: cliEnv(),
-      stdio: "pipe",
-    });
+    execSync(
+      `${CLI} add devin -t sse -u https://mcp.devin.ai/sse --token RESTORED_TOKEN --header X-Org-Id=org_JVU8h2dxO575yI66`,
+      {
+        cwd: process.cwd(),
+        env: cliEnv(),
+        stdio: "pipe",
+      }
+    );
 
     config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     const readded = config.remoteServers.find((s: any) => s.id === "devin");
     expect(readded).toBeDefined();
     expect(readded.bearerToken).toBe("RESTORED_TOKEN");
+    expect(readded.headers).toEqual({ "X-Org-Id": "org_JVU8h2dxO575yI66" });
 
     const jsonOutput = execSync(`${CLI} list --json`, {
       cwd: process.cwd(),
@@ -115,6 +120,7 @@ describe("CLI CRUD flows with sardine config", () => {
 
     const devinOutput = parsed.remoteServers.find((s: any) => s.id === "devin");
     expect(devinOutput.bearerToken).toBe(REDACTED_PLACEHOLDER);
+    expect(devinOutput.headers).toEqual({ "X-Org-Id": REDACTED_PLACEHOLDER });
   });
 
   it("edits env vars on a stdio server via CLI", () => {

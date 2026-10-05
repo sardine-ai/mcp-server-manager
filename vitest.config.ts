@@ -8,7 +8,20 @@ export default defineConfig({
     setupFiles: ["./tests/vitest.setup.ts"],
     coverage: {
       provider: "v8",
-      reporter: ["text", "json", "html"],
+      reporter: ["text", "json", "json-summary", "html"],
+      exclude: [
+        "coverage/**",
+        "dist/**",
+        "tests/**",
+        "**/*.d.ts",
+        "src/types/**",
+        "src/**/types.ts",
+        "src/**/index.ts",
+      ],
+      thresholds: {
+        statements: 80,
+        lines: 80,
+      },
     },
     // Prevent orphan processes and improve cleanup
     pool: "forks",

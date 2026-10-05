@@ -21,6 +21,10 @@ export function formatTokens(tokens: number): string {
  * Output data as formatted JSON to stdout
  * @param data - Data to serialize and output
  */
+export function formatSwitchable(label: string): string {
+  return `◀ ${label} ▶`;
+}
+
 export function outputJson(data: unknown): void {
   console.log(JSON.stringify(data, null, 2));
 }

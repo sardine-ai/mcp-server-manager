@@ -41,7 +41,7 @@ if command -v mcpsm &> /dev/null; then
     echo -e "${GREEN}✓ MCP Server Manager installed successfully!${NC}"
     echo ""
     echo "Run 'mcpsm' to start the TUI or 'mcpsm --help' for CLI commands."
-    echo "Documentation: https://mateustorquato.github.io/mcp-server-manager/docs/"
+    echo "Documentation: https://sardine-ai.github.io/mcp-server-manager/docs/"
 else
     echo -e "${RED}Error: Installation completed but 'mcpsm' command not found.${NC}"
     echo "Please check your PATH and ensure npm global bin directory is included."

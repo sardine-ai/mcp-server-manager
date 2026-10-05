@@ -99,6 +99,29 @@ describe("ImportExportService", () => {
       expect(result?.servers[0].bearerToken).toBe("token123");
     });
 
+    it("should parse remote serverUrl and headers from JSON configs", () => {
+      const claudeConfig = {
+        mcpServers: {
+          devin: {
+            serverUrl: "https://mcp.devin.ai/mcp",
+            headers: {
+              Authorization: "Bearer devin-token",
+              "X-Org-Id": "org_JVU8h2dxO575yI66",
+            },
+          },
+        },
+      };
+
+      const result = importExportService.parseImportData(claudeConfig);
+      expect(result?.format).toBe("claude");
+      expect(result?.servers[0].serverType).toBe("remote");
+      expect(result?.servers[0].url).toBe("https://mcp.devin.ai/mcp");
+      expect(result?.servers[0].headers).toEqual({
+        Authorization: "Bearer devin-token",
+        "X-Org-Id": "org_JVU8h2dxO575yI66",
+      });
+    });
+
     it("should parse MCPSM format with servers and remoteServers", () => {
       const mcpsmConfig = {
         servers: [{ id: "local1", name: "Local 1", command: "npx", args: [] }],
@@ -218,6 +241,28 @@ describe("ImportExportService", () => {
       expect(newConfig.remoteServers.find((s) => s.id === "new-remote")).toBeDefined();
     });
 
+    it("should add new remote servers with custom headers", () => {
+      const servers = [
+        {
+          id: "devin",
+          name: "devin",
+          url: "https://mcp.devin.ai/mcp",
+          serverType: "remote" as const,
+          headers: {
+            "X-Org-Id": "org_JVU8h2dxO575yI66",
+          },
+        },
+      ];
+
+      const result = importExportService.mergeServers(servers);
+      expect(result.added).toBe(1);
+
+      const added = configService.findRemoteServer("devin");
+      expect(added?.headers).toEqual({
+        "X-Org-Id": "org_JVU8h2dxO575yI66",
+      });
+    });
+
     it("should skip existing servers without overwrite", () => {
       const servers = [
         {
@@ -297,6 +342,25 @@ describe("ImportExportService", () => {
       expect(local).toHaveProperty("name");
       expect(local).toHaveProperty("command");
       expect(local).toHaveProperty("args");
+    });
+
+    it("should export remote server headers in MCPSM format", () => {
+      configService.addRemoteServer({
+        id: "devin",
+        name: "devin",
+        type: "http",
+        url: "https://mcp.devin.ai/mcp",
+        headers: {
+          "X-Org-Id": "org_JVU8h2dxO575yI66",
+        },
+      });
+
+      const result = importExportService.exportToMcpsmFormat();
+      const devin = result.remoteServers.find((server) => server.id === "devin");
+
+      expect(devin?.headers).toEqual({
+        "X-Org-Id": "org_JVU8h2dxO575yI66",
+      });
     });
   });
 

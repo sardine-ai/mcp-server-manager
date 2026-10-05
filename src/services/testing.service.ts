@@ -280,6 +280,7 @@ export class TestingService {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
+      ...(server.headers || {}),
     };
 
     // Static bearer token takes precedence

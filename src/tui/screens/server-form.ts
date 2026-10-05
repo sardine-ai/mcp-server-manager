@@ -2,6 +2,56 @@ import type { LocalServer, RemoteServer, Result, TransportType } from "../../typ
 import { parseEnvInput, normalizeEnv } from "../../shared/env.js";
 import { REDACTED_PLACEHOLDER } from "../../shared/redaction.js";
 
+export enum Step {
+  Name = "name",
+  Type = "type",
+  Command = "command",
+  Args = "args",
+  Env = "env",
+  Url = "url",
+  Token = "token",
+  OauthToggle = "oauthToggle",
+  ClientId = "clientId",
+  ClientSecret = "clientSecret",
+  Scopes = "scopes",
+  AuthServer = "authServer",
+  Testing = "testing",
+  Authenticating = "authenticating",
+  Done = "done",
+}
+
+export const STEP_LABELS: Record<Step, string> = {
+  [Step.Name]: "Server Name",
+  [Step.Type]: "Server Type",
+  [Step.Command]: "Command",
+  [Step.Args]: "Arguments",
+  [Step.Env]: "Environment",
+  [Step.Url]: "Server URL",
+  [Step.Token]: "Bearer Token",
+  [Step.OauthToggle]: "OAuth",
+  [Step.ClientId]: "OAuth Client ID",
+  [Step.ClientSecret]: "OAuth Secret",
+  [Step.Scopes]: "OAuth Scopes",
+  [Step.AuthServer]: "Auth Server",
+  [Step.Testing]: "Testing",
+  [Step.Authenticating]: "Authenticating",
+  [Step.Done]: "Done",
+};
+
+export const LOCAL_STEPS: Step[] = [Step.Name, Step.Type, Step.Command, Step.Args, Step.Env];
+export const REMOTE_STEPS: Step[] = [Step.Name, Step.Type, Step.Url, Step.Token, Step.OauthToggle];
+export const REMOTE_OAUTH_STEPS: Step[] = [
+  Step.Name,
+  Step.Type,
+  Step.Url,
+  Step.Token,
+  Step.OauthToggle,
+  Step.ClientId,
+  Step.ClientSecret,
+  Step.Scopes,
+  Step.AuthServer,
+];
+
 export type ServerType = "stdio" | TransportType;
 
 export interface ServerFormFields {

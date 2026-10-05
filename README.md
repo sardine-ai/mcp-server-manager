@@ -7,9 +7,9 @@
 [![npm version](https://img.shields.io/npm/v/mcp-server-manager?color=blue)](https://www.npmjs.com/package/mcp-server-manager)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js->=18-green)](https://nodejs.org)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/MateusTorquato/mcp-server-manager)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/sardine-ai/mcp-server-manager)
 
-**[🌐 Website & Documentation](https://mateustorquato.github.io/mcp-server-manager)**
+**[🌐 Website & Documentation](https://sardine-ai.github.io/mcp-server-manager)**
 
 </div>
 
@@ -53,13 +53,13 @@ npm install -g mcp-server-manager
 ### Bash (curl)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MateusTorquato/mcp-server-manager/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sardine-ai/mcp-server-manager/main/scripts/install.sh | bash
 ```
 
 ### PowerShell
 
 ```powershell
-irm https://raw.githubusercontent.com/MateusTorquato/mcp-server-manager/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/sardine-ai/mcp-server-manager/main/scripts/install.ps1 | iex
 ```
 
 ---
@@ -88,16 +88,16 @@ mcpsm test
 mcpsm clients connect claude
 ```
 
-For complete command reference and guides, see the **[documentation](https://mateustorquato.github.io/mcp-server-manager/guide/getting-started.html)**.
+For complete command reference and guides, see the **[documentation](https://sardine-ai.github.io/mcp-server-manager/guide/getting-started.html)**.
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Please see our [contributing guidelines](https://github.com/MateusTorquato/mcp-server-manager/blob/main/CONTRIBUTING.md) for details.
+Contributions are welcome! Please see our [contributing guidelines](https://github.com/sardine-ai/mcp-server-manager/blob/main/CONTRIBUTING.md) for details.
 
 ---
 
 ## License
 
-MIT © [Mateus Torquato](https://github.com/MateusTorquato)
+MIT © [Sardine AI](https://github.com/sardine-ai)

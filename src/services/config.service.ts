@@ -63,14 +63,6 @@ export class ConfigService {
     return this.serverManager.getAllServers();
   }
 
-  getEnabledLocalServers(): LocalServer[] {
-    return this.serverManager.getEnabledLocalServers();
-  }
-
-  getEnabledRemoteServers(): RemoteServer[] {
-    return this.serverManager.getEnabledRemoteServers();
-  }
-
   // === Gateway config ===
   getPort(): number {
     return this.gatewayConfigService.getPort();
@@ -149,14 +141,6 @@ export class ConfigService {
 
   deleteServer(id: string): Result {
     return this.serverManager.deleteServer(id);
-  }
-
-  enableServer(id: string): Result {
-    return this.serverManager.enableServer(id);
-  }
-
-  disableServer(id: string): Result {
-    return this.serverManager.disableServer(id);
   }
 
   getFilterId(serverId: string, type: "local" | "remote"): string {

@@ -46,8 +46,6 @@ export interface BaseServer {
   id: string;
   /** Display name for the server */
   name: string;
-  /** Whether the server is disabled */
-  disabled?: boolean;
 }
 
 /** Local server configuration (STDIO-based) */
@@ -66,6 +64,8 @@ export interface RemoteServer extends BaseServer {
   type: TransportType;
   /** Server endpoint URL */
   url: string;
+  /** Custom HTTP headers for remote transports */
+  headers?: Record<string, string>;
   /** Bearer token for authentication (static token) */
   bearerToken?: string;
   /** OAuth configuration (dynamic tokens) */

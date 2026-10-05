@@ -2,6 +2,11 @@ import fs from "fs";
 import path from "path";
 import type { AppConfig, ConfigPaths, SelectionState, ToolFilters } from "../../types/index.js";
 import { createLogger } from "../../shared/logger.js";
+import {
+  ensurePrivateDirectory,
+  protectExistingPrivateFile,
+  writePrivateJsonFile,
+} from "../../shared/secure-storage.js";
 
 const log = createLogger("ConfigRepository");
 
@@ -53,7 +58,7 @@ export class ConfigRepository {
   }
 
   saveConfig(): void {
-    fs.writeFileSync(this.paths.configPath, JSON.stringify(this.config, null, 2));
+    writePrivateJsonFile(this.paths.configPath, this.config);
   }
 
   updateConfig(mutator: (config: AppConfig) => void): void {
@@ -66,7 +71,7 @@ export class ConfigRepository {
   }
 
   saveToolFilters(): void {
-    fs.writeFileSync(this.paths.toolFiltersPath, JSON.stringify(this.toolFilters, null, 2));
+    writePrivateJsonFile(this.paths.toolFiltersPath, this.toolFilters);
   }
 
   updateToolFilters(mutator: (filters: ToolFilters) => void): void {
@@ -80,18 +85,17 @@ export class ConfigRepository {
 
   saveSelectionState(state: SelectionState): void {
     this.selectionState = state;
-    fs.writeFileSync(this.paths.selectionStatePath, JSON.stringify(state, null, 2));
+    writePrivateJsonFile(this.paths.selectionStatePath, state);
   }
 
   private ensureConfigDir(): void {
-    if (!fs.existsSync(this.configDir)) {
-      fs.mkdirSync(this.configDir, { recursive: true });
-    }
+    ensurePrivateDirectory(this.configDir);
   }
 
   private loadConfig(): AppConfig {
     try {
       if (fs.existsSync(this.paths.configPath)) {
+        protectExistingPrivateFile(this.paths.configPath);
         const data = fs.readFileSync(this.paths.configPath, "utf8");
         const parsed = JSON.parse(data) as Partial<AppConfig>;
 
@@ -112,13 +116,14 @@ export class ConfigRepository {
     }
 
     const fallback = { ...DEFAULT_CONFIG };
-    fs.writeFileSync(this.paths.configPath, JSON.stringify(fallback, null, 2));
+    writePrivateJsonFile(this.paths.configPath, fallback);
     return fallback;
   }
 
   private loadToolFilters(): ToolFilters {
     try {
       if (fs.existsSync(this.paths.toolFiltersPath)) {
+        protectExistingPrivateFile(this.paths.toolFiltersPath);
         const data = fs.readFileSync(this.paths.toolFiltersPath, "utf8");
         return JSON.parse(data) as ToolFilters;
       }
@@ -131,6 +136,7 @@ export class ConfigRepository {
   private loadSelectionState(): SelectionState {
     try {
       if (fs.existsSync(this.paths.selectionStatePath)) {
+        protectExistingPrivateFile(this.paths.selectionStatePath);
         const data = fs.readFileSync(this.paths.selectionStatePath, "utf8");
         return JSON.parse(data) as SelectionState;
       }

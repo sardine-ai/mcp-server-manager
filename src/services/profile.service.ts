@@ -12,6 +12,7 @@ import type {
 } from "../types/index.js";
 import { getConfigService } from "./config.service.js";
 import { createLogger } from "../shared/logger.js";
+import { protectExistingPrivateFile, writePrivateJsonFile } from "../shared/secure-storage.js";
 
 const log = createLogger("ProfileService");
 
@@ -42,6 +43,7 @@ export class ProfileService {
   private load(): ProfilesConfig {
     try {
       if (fs.existsSync(this.profilesPath)) {
+        protectExistingPrivateFile(this.profilesPath);
         const data = fs.readFileSync(this.profilesPath, "utf8");
         const parsed = JSON.parse(data) as Partial<ProfilesConfig>;
         return { ...DEFAULT_PROFILES, ...parsed };
@@ -54,7 +56,7 @@ export class ProfileService {
 
   /** Save profiles to file */
   private save(): void {
-    fs.writeFileSync(this.profilesPath, JSON.stringify(this.profiles, null, 2));
+    writePrivateJsonFile(this.profilesPath, this.profiles);
   }
 
   /** Get active profile ID */

@@ -101,13 +101,19 @@ mcpsm auth refresh <server>
 
 ## Token Storage
 
-Credentials are stored in:
+OAuth tokens are stored as local JSON in:
 
-- **macOS**: Keychain
-- **Linux**: Secret Service (via libsecret)
-- **Windows**: Credential Manager
+- `~/.mcp-manager/oauth-tokens.json`
 
-Fallback: Encrypted file in `~/.mcp-manager/`
+On macOS and Linux, mcpsm creates the config directory with `0700`
+permissions and writes OAuth token files with `0600` permissions. Existing
+token files with broader permissions are tightened when mcpsm loads or saves
+them.
+
+Older versions used `~/.mcpsm/oauth-tokens.json`. If that legacy file exists
+and the new token file is absent, mcpsm copies the tokens into
+`~/.mcp-manager/oauth-tokens.json` and leaves the legacy file in place with
+private permissions.
 
 ---
 

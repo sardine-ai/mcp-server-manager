@@ -151,6 +151,58 @@ describe("TestingService", () => {
       const toolFilters = newConfigService.getToolFilters();
       expect(toolFilters["remote:failed-remote"]).toBeDefined();
     });
+
+    it("should send custom headers with remote HTTP server requests", async () => {
+      const mockFetch = vi.fn();
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new globalThis.Headers(),
+          json: async () => ({ result: {} }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new globalThis.Headers({ "content-type": "application/json" }),
+          json: async () => ({
+            result: {
+              tools: [{ name: "ask_question", description: "Ask Devin a question" }],
+            },
+          }),
+        });
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mockFetch;
+
+      try {
+        const server = {
+          id: "devin",
+          name: "devin",
+          type: "http" as const,
+          url: "https://mcp.devin.ai/mcp",
+          headers: {
+            Authorization: "Bearer devin-token",
+            "X-Org-Id": "org_JVU8h2dxO575yI66",
+          },
+        };
+
+        const result = await testingService.testRemoteServer(server);
+
+        expect(result.success).toBe(true);
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(mockFetch.mock.calls[0][1].headers).toMatchObject({
+          Authorization: "Bearer devin-token",
+          "X-Org-Id": "org_JVU8h2dxO575yI66",
+        });
+        expect(mockFetch.mock.calls[1][1].headers).toMatchObject({
+          Authorization: "Bearer devin-token",
+          "X-Org-Id": "org_JVU8h2dxO575yI66",
+        });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
   });
 
   describe("autoTestUnknownServers", () => {

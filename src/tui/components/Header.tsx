@@ -4,7 +4,7 @@
 
 import React from "react";
 import { Box, Text } from "ink";
-import { formatTokens } from "../../shared/formatters.js";
+import { formatTokens, formatSwitchable } from "../../shared/formatters.js";
 import { useTheme } from "../theme/index.js";
 
 interface HeaderProps {
@@ -27,7 +27,7 @@ export function Header({
   const { theme } = useTheme();
 
   const subtitleParts: string[] = [];
-  if (profile) subtitleParts.push(`Profile: ◀ ${profile} ▶`);
+  if (profile) subtitleParts.push(`Profile: ${formatSwitchable(profile)}`);
   if (port) subtitleParts.push(`Port: ${port}`);
   if (totalTokens !== undefined) {
     const tokensLabel =

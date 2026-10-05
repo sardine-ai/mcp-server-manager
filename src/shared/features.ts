@@ -82,7 +82,7 @@ export const FEATURES: Feature[] = [
     id: "server-enable-disable",
     name: "Enable/disable server",
     category: "servers",
-    cliCommands: ["enable", "disable"],
+    cliCommands: ["profile add", "profile remove"],
     tuiImplementation: "key:space",
     requiredInTui: true,
   },
@@ -128,6 +128,14 @@ export const FEATURES: Feature[] = [
     category: "clients",
     cliCommands: ["clients connect", "clients disconnect"],
     tuiImplementation: "ClientsScreen.tsx",
+    requiredInTui: true,
+  },
+  {
+    id: "clients-scope",
+    name: "Global or project client configuration",
+    category: "clients",
+    cliCommands: ["clients connect --scope", "clients list --scope", "clients disconnect --scope", "clients open --scope"],
+    tuiImplementation: "ClientsScreen.tsx (S key)",
     requiredInTui: true,
   },
   {

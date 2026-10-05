@@ -29,14 +29,6 @@ export class ServerManager {
     return [...config.servers, ...config.remoteServers];
   }
 
-  getEnabledLocalServers(): LocalServer[] {
-    return this.repository.getConfig().servers.filter((s) => !s.disabled);
-  }
-
-  getEnabledRemoteServers(): RemoteServer[] {
-    return this.repository.getConfig().remoteServers.filter((s) => !s.disabled);
-  }
-
   findServer(idOrName: string): { server: Server; type: "local" | "remote" } | null {
     const local = this.repository
       .getConfig()
@@ -101,9 +93,7 @@ export class ServerManager {
       config.servers.push(server);
     });
 
-    if (!server.disabled) {
-      this.selectionService.ensureLocalSelected(server.id);
-    }
+    this.selectionService.ensureLocalSelected(server.id);
 
     return { success: true };
   }
@@ -132,10 +122,7 @@ export class ServerManager {
       config.remoteServers.push(server);
     });
 
-    const remoteId = `remote:${server.id}`;
-    if (!server.disabled) {
-      this.selectionService.ensureRemoteSelected(remoteId);
-    }
+    this.selectionService.ensureRemoteSelected(`remote:${server.id}`);
 
     return { success: true };
   }
@@ -199,40 +186,5 @@ export class ServerManager {
     }
 
     return result.type === "local" ? this.deleteLocalServer(id) : this.deleteRemoteServer(id);
-  }
-
-  enableServer(id: string): Result {
-    const result = this.findServer(id);
-    if (!result) {
-      return { success: false, error: `Server '${id}' not found` };
-    }
-
-    let updateResult: Result;
-    if (result.type === "local") {
-      updateResult = this.updateLocalServer(id, { disabled: false });
-      if (updateResult.success) {
-        this.selectionService.ensureLocalSelected(id);
-      }
-    } else {
-      updateResult = this.updateRemoteServer(id, { disabled: false });
-      if (updateResult.success) {
-        this.selectionService.ensureRemoteSelected(`remote:${id}`);
-      }
-    }
-
-    return updateResult;
-  }
-
-  disableServer(id: string): Result {
-    const result = this.findServer(id);
-    if (!result) {
-      return { success: false, error: `Server '${id}' not found` };
-    }
-
-    if (result.type === "local") {
-      return this.updateLocalServer(id, { disabled: true });
-    }
-
-    return this.updateRemoteServer(id, { disabled: true });
   }
 }

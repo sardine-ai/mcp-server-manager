@@ -151,10 +151,10 @@ export function ImportExportScreen({ onBack }: ImportExportScreenProps): React.R
   );
 
   // Finalize import with per-server decisions
-  const finalizeImport = useCallback((): void => {
+  const finalizeImport = useCallback((decisions = state.conflictDecisions): void => {
     const mergeResult = importExportService.mergeServersWithDecisions(
       state.importedServers,
-      state.conflictDecisions
+      decisions
     );
 
     const details: string[] = [];
@@ -336,7 +336,7 @@ export function ImportExportScreen({ onBack }: ImportExportScreenProps): React.R
             conflictDecisions: newDecisions,
             view: "import-preview",
           }));
-          queueMicrotask(() => finalizeImport());
+          queueMicrotask(() => finalizeImport(newDecisions));
         }
         return;
       }
@@ -358,7 +358,7 @@ export function ImportExportScreen({ onBack }: ImportExportScreenProps): React.R
             conflictDecisions: newDecisions,
             view: "import-preview",
           }));
-          queueMicrotask(() => finalizeImport());
+          queueMicrotask(() => finalizeImport(newDecisions));
         }
         return;
       }
@@ -380,7 +380,7 @@ export function ImportExportScreen({ onBack }: ImportExportScreenProps): React.R
             conflictDecisions: newDecisions,
             view: "import-preview",
           }));
-          queueMicrotask(() => finalizeImport());
+          queueMicrotask(() => finalizeImport(newDecisions));
         }
         return;
       }

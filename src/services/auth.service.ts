@@ -28,6 +28,14 @@ import type {
 } from "../types/index.js";
 import { createLogger } from "../shared/logger.js";
 import { renderCallbackPage } from "./auth-callback.html.js";
+import {
+  applyPrivateMode,
+  ensurePrivateDirectory,
+  PRIVATE_DIR_MODE,
+  protectExistingPrivateFile,
+  writePrivateFile,
+  writePrivateJsonFile,
+} from "../shared/secure-storage.js";
 
 const log = createLogger("AuthService");
 
@@ -63,6 +71,7 @@ const PROACTIVE_RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 240_000, 480_000]; /
 
 export class AuthService {
   private configDir: string;
+  private legacyConfigDirs: string[];
   private tokensPath: string;
   private pendingAuthPath: string;
   private tokens: Map<string, StoredOAuthTokens>;
@@ -78,10 +87,26 @@ export class AuthService {
   private refreshRetryCounts: Map<string, number> = new Map();
 
   constructor(configDir?: string) {
+    const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+    const defaultConfigDir = path.join(homeDir, ".mcp-manager");
+    const defaultLegacyConfigDir = path.join(homeDir, ".mcpsm");
+    const shouldUseDefaultPaths =
+      !configDir && !process.env.MCP_MANAGER_CONFIG_DIR && !process.env.MCPSM_CONFIG_DIR;
+    const shouldMigrateLegacyEnv = !configDir && !!process.env.MCP_MANAGER_CONFIG_DIR;
+
     this.configDir =
       configDir ||
+      process.env.MCP_MANAGER_CONFIG_DIR ||
       process.env.MCPSM_CONFIG_DIR ||
-      path.join(process.env.HOME || process.env.USERPROFILE || "", ".mcpsm");
+      defaultConfigDir;
+    this.legacyConfigDirs = Array.from(
+      new Set(
+        [
+          shouldMigrateLegacyEnv ? process.env.MCPSM_CONFIG_DIR : undefined,
+          shouldUseDefaultPaths ? defaultLegacyConfigDir : undefined,
+        ].filter(Boolean) as string[]
+      )
+    );
 
     this.tokensPath = path.join(this.configDir, TOKENS_FILE);
     this.pendingAuthPath = path.join(this.configDir, PENDING_AUTH_FILE);
@@ -89,14 +114,32 @@ export class AuthService {
     this.pendingAuths = new Map();
 
     this.ensureConfigDir();
+    this.migrateLegacyTokens();
     this.loadTokens();
     this.loadPendingAuths();
   }
 
   /** Ensure config directory exists */
   private ensureConfigDir(): void {
-    if (!fs.existsSync(this.configDir)) {
-      fs.mkdirSync(this.configDir, { recursive: true });
+    ensurePrivateDirectory(this.configDir);
+  }
+
+  /** Move legacy OAuth tokens into the main config directory when no new file exists yet */
+  private migrateLegacyTokens(): void {
+    for (const legacyConfigDir of this.legacyConfigDirs) {
+      if (legacyConfigDir === this.configDir) continue;
+
+      const legacyTokensPath = path.join(legacyConfigDir, TOKENS_FILE);
+
+      if (fs.existsSync(legacyConfigDir)) {
+        applyPrivateMode(legacyConfigDir, PRIVATE_DIR_MODE);
+      }
+
+      protectExistingPrivateFile(legacyTokensPath);
+
+      if (!fs.existsSync(this.tokensPath) && fs.existsSync(legacyTokensPath)) {
+        writePrivateFile(this.tokensPath, fs.readFileSync(legacyTokensPath, "utf8"));
+      }
     }
   }
 
@@ -104,6 +147,7 @@ export class AuthService {
   private loadTokens(): void {
     try {
       if (fs.existsSync(this.tokensPath)) {
+        protectExistingPrivateFile(this.tokensPath);
         const data = fs.readFileSync(this.tokensPath, "utf8");
         const parsed = JSON.parse(data) as Record<string, StoredOAuthTokens>;
         this.tokens = new Map(Object.entries(parsed));
@@ -118,7 +162,7 @@ export class AuthService {
   private saveTokens(): void {
     try {
       const data = Object.fromEntries(this.tokens);
-      fs.writeFileSync(this.tokensPath, JSON.stringify(data, null, 2));
+      writePrivateJsonFile(this.tokensPath, data);
     } catch (error) {
       log.debug("Failed to save OAuth tokens:", error);
     }
@@ -128,6 +172,7 @@ export class AuthService {
   private loadPendingAuths(): void {
     try {
       if (fs.existsSync(this.pendingAuthPath)) {
+        protectExistingPrivateFile(this.pendingAuthPath);
         const data = fs.readFileSync(this.pendingAuthPath, "utf8");
         const parsed = JSON.parse(data) as Record<string, PendingAuthorization>;
 
@@ -149,7 +194,7 @@ export class AuthService {
   private savePendingAuths(): void {
     try {
       const data = Object.fromEntries(this.pendingAuths);
-      fs.writeFileSync(this.pendingAuthPath, JSON.stringify(data, null, 2));
+      writePrivateJsonFile(this.pendingAuthPath, data);
     } catch (error) {
       log.debug("Failed to save pending authorizations:", error);
     }

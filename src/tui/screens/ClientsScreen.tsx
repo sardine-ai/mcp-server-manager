@@ -2,7 +2,7 @@
  * ClientsScreen - Manage MCP client connections (ink component)
  */
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import os from "os";
@@ -11,6 +11,7 @@ import { createMenuSections } from "../utils/menu.js";
 import { ClientService, getClientService } from "../../services/client.service.js";
 import type { DetectedClient } from "../../types/index.js";
 import { useTheme } from "../theme/index.js";
+import { formatSwitchable } from "../../shared/formatters.js";
 
 /** Convert absolute path to use ~ for home directory */
 function shortenPath(path: string): string {
@@ -24,6 +25,9 @@ function shortenPath(path: string): string {
 interface ClientsScreenProps {
   onBack: () => void;
   currentProfileId?: string;
+  currentProfileName?: string;
+  onProfilePrev?: () => void;
+  onProfileNext?: () => void;
 }
 
 interface ClientsState {
@@ -34,7 +38,7 @@ interface ClientsState {
   messageType: "success" | "error" | "info";
 }
 
-export function ClientsScreen({ onBack, currentProfileId }: ClientsScreenProps): React.ReactElement {
+export function ClientsScreen({ onBack, currentProfileId, currentProfileName, onProfilePrev, onProfileNext }: ClientsScreenProps): React.ReactElement {
   const { theme } = useTheme();
   const [projectScope, setProjectScope] = useState(false);
   const clientService = useMemo(
@@ -103,12 +107,31 @@ export function ClientsScreen({ onBack, currentProfileId }: ClientsScreenProps):
     }));
   }, [clientService, currentProfileId]);
 
+  useEffect(() => {
+    setState((prev) => ({
+      ...prev,
+      clients: clientService.detectClients(currentProfileId),
+    }));
+  }, [clientService, currentProfileId]);
+
   // Handle keyboard input
   useInput((input, key) => {
     const { clients, currentIndex, connecting } = state;
 
     // Don't process input while connecting
     if (connecting) return;
+
+    // Left arrow - previous profile
+    if (key.leftArrow) {
+      onProfilePrev?.();
+      return;
+    }
+
+    // Right arrow - next profile
+    if (key.rightArrow) {
+      onProfileNext?.();
+      return;
+    }
 
     // Quit
     if (input === "q" || key.escape) {
@@ -147,8 +170,8 @@ export function ClientsScreen({ onBack, currentProfileId }: ClientsScreenProps):
       return;
     }
 
-    // Connect/Disconnect - Enter
-    if (key.return && clients.length > 0) {
+    // Connect/Disconnect - Space
+    if (input === " " && clients.length > 0) {
       handleToggleConnection();
       return;
     }
@@ -179,7 +202,8 @@ export function ClientsScreen({ onBack, currentProfileId }: ClientsScreenProps):
 
   const clientsMenuSections = createMenuSections({
     actions: [
-      { key: "Enter", label: "Connect/Disconnect" },
+      { key: "Space", label: "Connect/Disconnect" },
+      { key: "←→", label: "Profile" },
       { key: "O", label: "Open config" },
       { key: "R", label: "Refresh" },
       { key: "S", label: "Global/Current folder" },
@@ -192,7 +216,7 @@ export function ClientsScreen({ onBack, currentProfileId }: ClientsScreenProps):
   // Show connecting spinner
   if (connecting) {
     return (
-      <ScreenLayout title={currentProfileId ? `MCP Clients — ${currentProfileId}` : "MCP Clients"} menuSections={clientsMenuSections}>
+      <ScreenLayout title={currentProfileName ? `MCP Clients — ${formatSwitchable(currentProfileName)}` : "MCP Clients"} menuSections={clientsMenuSections}>
         <Box paddingY={1} gap={1}>
           <Text color={theme.colors.primary}>
             <Spinner type="dots" />
@@ -205,7 +229,7 @@ export function ClientsScreen({ onBack, currentProfileId }: ClientsScreenProps):
 
   return (
     <ScreenLayout
-      title={currentProfileId ? `MCP Clients — ${currentProfileId}` : "MCP Clients"}
+      title={currentProfileName ? `MCP Clients — ${formatSwitchable(currentProfileName)}` : "MCP Clients"}
       menuSections={clientsMenuSections}
       footer={
         message ? (
@@ -225,48 +249,30 @@ export function ClientsScreen({ onBack, currentProfileId }: ClientsScreenProps):
       ) : (
         clients.map((client, idx) => {
           const isCurrent = idx === currentIndex;
+          const isNotInstalled = client.status === "not-installed";
+          const isConnected = client.status === "connected";
 
-          // Status icon and color based on connection status
-          let statusIcon: string;
-          let statusColor: "green" | "yellow" | "gray";
-          let statusText: string;
-
-          if (client.status === "connected") {
-            statusIcon = "✔";
-            statusColor = "green";
-            statusText = "connected";
-          } else if (client.status === "disconnected") {
-            statusIcon = "○";
-            statusColor = "yellow";
-            statusText = "disconnected";
-          } else {
-            statusIcon = "✗";
-            statusColor = "gray";
-            statusText = "not installed";
-          }
+          const statusIcon = isConnected ? "✔" : isNotInstalled ? "✗" : "○";
+          const statusColor = isConnected ? theme.colors.success : isNotInstalled ? theme.colors.disabled : theme.colors.warning;
+          const statusText = isConnected ? "connected" : isNotInstalled ? "not installed" : "disconnected";
 
           return (
-            <Box key={client.id} flexDirection="column" marginBottom={1}>
-              {/* First line: arrow, icon, name, status, servers */}
-              <Box gap={1}>
-                <Text color={isCurrent ? theme.colors.highlightText : theme.colors.primary}>{isCurrent ? "→" : " "}</Text>
-                <Text color={statusColor}>{statusIcon}</Text>
-                <Text color={isCurrent ? theme.colors.highlightText : undefined} bold={isCurrent}>
-                  {client.name}
-                </Text>
-                <Text dimColor>[{client.id}]</Text>
-                <Text dimColor>-</Text>
-                <Text color={statusColor}>{statusText}</Text>
-                <Text dimColor>-</Text>
-                <Text dimColor>
+            <Box key={client.id} gap={1}>
+              <Text color={isCurrent ? theme.colors.highlightText : theme.colors.primary} bold={isCurrent}>{isCurrent ? "→" : " "}</Text>
+              <Text color={statusColor}>{statusIcon}</Text>
+              <Text color={isNotInstalled ? theme.colors.disabled : isCurrent ? theme.colors.highlightText : undefined} bold={isCurrent && !isNotInstalled}>
+                {client.name}
+              </Text>
+              <Text color={statusColor}>
+                {statusText}
+              </Text>
+              {client.serverCount > 0 && (
+                <Text color={isCurrent ? theme.colors.highlightText : undefined} dimColor={!isCurrent}>
                   {client.serverCount} {client.serverCount === 1 ? "server" : "servers"}
                 </Text>
-              </Box>
-              {/* Second line: config path (prefer real-time path, fallback to primary) */}
-              {(client.mcpConfigPath || client.configPath) && (
-                <Box marginLeft={3}>
-                  <Text dimColor>{shortenPath(client.mcpConfigPath || client.configPath || "")}</Text>
-                </Box>
+              )}
+              {isCurrent && (client.mcpConfigPath || client.configPath) && (
+                <Text dimColor>{shortenPath(client.mcpConfigPath || client.configPath || "")}</Text>
               )}
             </Box>
           );

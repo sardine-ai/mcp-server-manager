@@ -74,30 +74,32 @@ export async function startTui(): Promise<void> {
   signals.forEach((signal) => process.once(signal, handleSignal));
   process.once("exit", cleanup);
 
+  // Proxy stdout to report rows=0, which forces Ink to use its full-screen
+  // clearTerminal path instead of eraseLines. The eraseLines approach (cursor up +
+  // erase line) doesn't work reliably in all terminal emulators (e.g. Conductor),
+  // causing ghost/duplicate renders. The clearTerminal path (\x1b[2J\x1b[3J\x1b[H)
+  // is universally supported.
+  const stdoutProxy = new Proxy(process.stdout, {
+    get(target, prop, receiver): unknown {
+      if (prop === "rows") return 0;
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value === "function") return value.bind(target);
+      return value;
+    },
+  });
+
   const { waitUntilExit } = render(
     React.createElement(
       QueryClientProvider,
       { client: queryClient },
       React.createElement(ThemeProvider, null, React.createElement(App))
-    )
+    ),
+    { stdout: stdoutProxy }
   );
-
-  const handleResize = (): void => {
-    if (shouldUseAlternateScreen) {
-      process.stdout.write(`${CLEAR_SCREEN}${CURSOR_HOME}`);
-    }
-  };
-
-  if (shouldUseAlternateScreen) {
-    process.stdout.on("resize", handleResize);
-  }
 
   try {
     await waitUntilExit();
   } finally {
-    if (shouldUseAlternateScreen) {
-      process.stdout.off("resize", handleResize);
-    }
     signals.forEach((signal) => process.removeListener(signal, handleSignal));
     cleanup();
   }

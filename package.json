@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-manager",
-  "version": "2.4.1",
+  "version": "2.6.1",
   "description": "Interactive CLI to manage, test, and run multiple MCP (Model Context Protocol) servers with OAuth support",
   "type": "module",
   "bin": {
@@ -54,15 +54,15 @@
     "anthropic",
     "openai"
   ],
-  "author": "Mateus Torquato",
+  "author": "Sardine AI",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MateusTorquato/mcp-server-manager.git"
+    "url": "git+https://github.com/sardine-ai/mcp-server-manager.git"
   },
-  "homepage": "https://github.com/MateusTorquato/mcp-server-manager#readme",
+  "homepage": "https://github.com/sardine-ai/mcp-server-manager#readme",
   "bugs": {
-    "url": "https://github.com/MateusTorquato/mcp-server-manager/issues"
+    "url": "https://github.com/sardine-ai/mcp-server-manager/issues"
   },
   "publishConfig": {
     "access": "public"

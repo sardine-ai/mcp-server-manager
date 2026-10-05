@@ -6,6 +6,7 @@ import fs from "fs";
 import type { Settings, SettingInfo, SettingsInfo, SettingResult } from "../types/index.js";
 import { getConfigService } from "./config.service.js";
 import { createLogger } from "../shared/logger.js";
+import { protectExistingPrivateFile, writePrivateJsonFile } from "../shared/secure-storage.js";
 
 const log = createLogger("SettingsService");
 
@@ -47,6 +48,7 @@ export class SettingsService {
   private load(): Settings {
     try {
       if (fs.existsSync(this.settingsPath)) {
+        protectExistingPrivateFile(this.settingsPath);
         const data = fs.readFileSync(this.settingsPath, "utf8");
         const parsed = JSON.parse(data) as Partial<Settings>;
         return { ...DEFAULT_SETTINGS, ...parsed };
@@ -59,7 +61,7 @@ export class SettingsService {
 
   /** Save settings to file */
   private save(): void {
-    fs.writeFileSync(this.settingsPath, JSON.stringify(this.settings, null, 2));
+    writePrivateJsonFile(this.settingsPath, this.settings);
   }
 
   /** Get all settings */

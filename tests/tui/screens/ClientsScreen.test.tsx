@@ -112,8 +112,8 @@ describe("ClientsScreen", () => {
     it("should connect/disconnect with Enter key", async () => {
       const { stdin } = render(<ClientsScreen onBack={mockOnBack} />);
 
-      // Press enter to toggle connection
-      stdin.write(KEYS.ENTER);
+      // Press space to toggle connection
+      stdin.write(KEYS.SPACE);
       await waitForStateUpdate();
 
       // Should have called either connectClient or disconnectClient
@@ -153,9 +153,9 @@ describe("ClientsScreen", () => {
     });
 
     it("should show profile name in title when profileId is provided", () => {
-      const { lastFrame } = render(<ClientsScreen onBack={mockOnBack} currentProfileId="dev" />);
+      const { lastFrame } = render(<ClientsScreen onBack={mockOnBack} currentProfileId="dev" currentProfileName="dev" />);
 
-      expect(lastFrame()).toContain("MCP Clients — dev");
+      expect(lastFrame()).toContain("MCP Clients — ◀ dev ▶");
     });
 
     it("should show generic title when no profileId is provided", () => {
@@ -165,11 +165,11 @@ describe("ClientsScreen", () => {
       expect(lastFrame()).not.toContain("—");
     });
 
-    it("should connect only the given profile on Enter", async () => {
-      // First client (Claude Desktop) is "connected", so Enter disconnects
-      const { stdin } = render(<ClientsScreen onBack={mockOnBack} currentProfileId="dev" />);
+    it("should connect only the given profile on Space", async () => {
+      // First client (Claude Desktop) is "connected", so Space disconnects
+      const { stdin } = render(<ClientsScreen onBack={mockOnBack} currentProfileId="dev" currentProfileName="dev" />);
 
-      stdin.write(KEYS.ENTER);
+      stdin.write(KEYS.SPACE);
       await waitForStateUpdate();
 
       expect(mockClientService.disconnectClient).toHaveBeenCalledWith("claude", "dev");
@@ -178,24 +178,24 @@ describe("ClientsScreen", () => {
     });
 
     it("should connect a disconnected client with the profile", async () => {
-      const { stdin } = render(<ClientsScreen onBack={mockOnBack} currentProfileId="staging" />);
+      const { stdin } = render(<ClientsScreen onBack={mockOnBack} currentProfileId="staging" currentProfileName="staging" />);
 
       // Navigate to Cursor (index 1, status: disconnected)
       stdin.write(KEYS.DOWN);
       await waitForStateUpdate();
 
-      stdin.write(KEYS.ENTER);
+      stdin.write(KEYS.SPACE);
       await waitForStateUpdate();
 
       expect(mockClientService.connectClient).toHaveBeenCalledWith("cursor", "staging");
     });
 
     it("should pass profileId to detectClients after connect/disconnect", async () => {
-      const { stdin } = render(<ClientsScreen onBack={mockOnBack} currentProfileId="prod" />);
+      const { stdin } = render(<ClientsScreen onBack={mockOnBack} currentProfileId="prod" currentProfileName="prod" />);
 
       mockClientService.detectClients.mockClear();
 
-      stdin.write(KEYS.ENTER);
+      stdin.write(KEYS.SPACE);
       await waitForStateUpdate();
 
       // detectClients should be re-called with the profileId to refresh status
@@ -216,7 +216,7 @@ describe("ClientsScreen", () => {
     it("should pass undefined profileId when none provided", async () => {
       const { stdin } = render(<ClientsScreen onBack={mockOnBack} />);
 
-      stdin.write(KEYS.ENTER);
+      stdin.write(KEYS.SPACE);
       await waitForStateUpdate();
 
       // Should call connectClient or disconnectClient with undefined profileId
@@ -238,7 +238,7 @@ describe("ClientsScreen", () => {
     await waitForStateUpdate();
     expect(lastFrame()).toContain("Current folder");
     expect(projectClientService.detectClients).toHaveBeenCalledWith("dev");
-    stdin.write(KEYS.ENTER);
+    stdin.write(KEYS.SPACE);
     await waitForStateUpdate();
     expect(projectClientService.connectClient).toHaveBeenCalledWith("cursor", "dev");
     expect(mockClientService.connectClient).not.toHaveBeenCalled();

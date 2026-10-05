@@ -18,21 +18,8 @@ import {
   prepareLocalServerUpdates,
   prepareRemoteServerUpdates,
   ServerFormFields,
+  Step,
 } from "./server-form.js";
-
-type Step =
-  | "name"
-  | "type"
-  | "command"
-  | "args"
-  | "env"
-  | "url"
-  | "token"
-  | "oauthToggle"
-  | "clientId"
-  | "clientSecret"
-  | "scopes"
-  | "authServer";
 
 interface EditServerScreenProps {
   server: LocalServer | RemoteServer;
@@ -91,7 +78,7 @@ export function EditServerScreen({
   useEffect(() => {
     setForm(initialForm);
   }, [initialForm]);
-  const [step, setStep] = useState<Step>("name");
+  const [step, setStep] = useState(Step.Name);
   const [error, setError] = useState<string | null>(null);
 
   const refreshDaemonIfRunning = useCallback(() => {
@@ -151,36 +138,36 @@ export function EditServerScreen({
   useInput((_input, key) => {
     if (!key.escape) return;
 
-    if (step === "name") {
+    if (step === Step.Name) {
       onBack();
       return;
     }
 
     if (type === "local") {
-      if (step === "command") {
-        setStep("name");
-      } else if (step === "args") {
-        setStep("command");
-      } else if (step === "env") {
-        setStep("args");
+      if (step === Step.Command) {
+        setStep(Step.Name);
+      } else if (step === Step.Args) {
+        setStep(Step.Command);
+      } else if (step === Step.Env) {
+        setStep(Step.Args);
       }
     } else {
-      if (step === "type") {
-        setStep("name");
-      } else if (step === "url") {
-        setStep("type");
-      } else if (step === "token") {
-        setStep("url");
-      } else if (step === "oauthToggle") {
-        setStep("token");
-      } else if (step === "clientId") {
-        setStep("oauthToggle");
-      } else if (step === "clientSecret") {
-        setStep("clientId");
-      } else if (step === "scopes") {
-        setStep("clientSecret");
-      } else if (step === "authServer") {
-        setStep("scopes");
+      if (step === Step.Type) {
+        setStep(Step.Name);
+      } else if (step === Step.Url) {
+        setStep(Step.Type);
+      } else if (step === Step.Token) {
+        setStep(Step.Url);
+      } else if (step === Step.OauthToggle) {
+        setStep(Step.Token);
+      } else if (step === Step.ClientId) {
+        setStep(Step.OauthToggle);
+      } else if (step === Step.ClientSecret) {
+        setStep(Step.ClientId);
+      } else if (step === Step.Scopes) {
+        setStep(Step.ClientSecret);
+      } else if (step === Step.AuthServer) {
+        setStep(Step.Scopes);
       }
     }
   });
@@ -200,40 +187,40 @@ export function EditServerScreen({
       }
     >
       <Box flexDirection="column" gap={1}>
-        {step === "name" && (
+        {step === Step.Name && (
           <>
             <Text color={theme.colors.success}>Server name</Text>
             <TextInput
               value={form.name}
               onChange={(value) => updateForm({ name: value })}
-              onSubmit={() => setStep(type === "local" ? "command" : "type")}
+              onSubmit={() => setStep(type === "local" ? Step.Command : Step.Type)}
             />
           </>
         )}
 
-        {type === "local" && step === "command" && (
+        {type === "local" && step === Step.Command && (
           <>
             <Text color={theme.colors.success}>Command</Text>
             <TextInput
               value={form.command}
               onChange={(value) => updateForm({ command: value })}
-              onSubmit={() => setStep("args")}
+              onSubmit={() => setStep(Step.Args)}
             />
           </>
         )}
 
-        {type === "local" && step === "args" && (
+        {type === "local" && step === Step.Args && (
           <>
             <Text color={theme.colors.success}>Arguments</Text>
             <TextInput
               value={form.args}
               onChange={(value) => updateForm({ args: value })}
-              onSubmit={() => setStep("env")}
+              onSubmit={() => setStep(Step.Env)}
             />
           </>
         )}
 
-        {type === "local" && step === "env" && (
+        {type === "local" && step === Step.Env && (
           <>
             <Text color={theme.colors.success}>Environment variables</Text>
             <Text dimColor>Format: KEY=VALUE pairs, separated by space or comma. Leave blank to clear.</Text>
@@ -241,7 +228,7 @@ export function EditServerScreen({
           </>
         )}
 
-        {type === "remote" && step === "type" && (
+        {type === "remote" && step === Step.Type && (
           <>
             <Text color={theme.colors.success}>Transport</Text>
             <SelectInput
@@ -251,35 +238,35 @@ export function EditServerScreen({
               )}
               onSelect={(item) => {
                 updateForm({ serverType: item.value as TransportType });
-                setStep("url");
+                setStep(Step.Url);
               }}
             />
           </>
         )}
 
-        {type === "remote" && step === "url" && (
+        {type === "remote" && step === Step.Url && (
           <>
             <Text color={theme.colors.success}>URL</Text>
             <TextInput
               value={form.url}
               onChange={(value) => updateForm({ url: value })}
-              onSubmit={() => setStep("token")}
+              onSubmit={() => setStep(Step.Token)}
             />
           </>
         )}
 
-        {type === "remote" && step === "token" && (
+        {type === "remote" && step === Step.Token && (
           <>
             <Text color={theme.colors.success}>Bearer token (optional)</Text>
             <TextInput
               value={form.token}
               onChange={(value) => updateForm({ token: value })}
-              onSubmit={() => setStep("oauthToggle")}
+              onSubmit={() => setStep(Step.OauthToggle)}
             />
           </>
         )}
 
-        {type === "remote" && step === "oauthToggle" && (
+        {type === "remote" && step === Step.OauthToggle && (
           <>
             <Text color={theme.colors.success}>Enable OAuth? (y/N)</Text>
             <TextInput
@@ -288,7 +275,7 @@ export function EditServerScreen({
               onSubmit={(value) => {
                 const enable = value.trim().toLowerCase().startsWith("y");
                 updateForm({ oauthEnabled: enable });
-                setStep(enable ? "clientId" : "name");
+                setStep(enable ? Step.ClientId : Step.Name);
                 if (!enable) {
                   saveRemoteServer();
                 }
@@ -297,40 +284,40 @@ export function EditServerScreen({
           </>
         )}
 
-        {type === "remote" && step === "clientId" && (
+        {type === "remote" && step === Step.ClientId && (
           <>
             <Text color={theme.colors.success}>OAuth Client ID (optional)</Text>
             <TextInput
               value={form.clientId}
               onChange={(value) => updateForm({ clientId: value })}
-              onSubmit={() => setStep("clientSecret")}
+              onSubmit={() => setStep(Step.ClientSecret)}
             />
           </>
         )}
 
-        {type === "remote" && step === "clientSecret" && (
+        {type === "remote" && step === Step.ClientSecret && (
           <>
             <Text color={theme.colors.success}>OAuth Client Secret (optional)</Text>
             <TextInput
               value={form.clientSecret}
               onChange={(value) => updateForm({ clientSecret: value })}
-              onSubmit={() => setStep("scopes")}
+              onSubmit={() => setStep(Step.Scopes)}
             />
           </>
         )}
 
-        {type === "remote" && step === "scopes" && (
+        {type === "remote" && step === Step.Scopes && (
           <>
             <Text color={theme.colors.success}>OAuth Scopes (comma or space separated, optional)</Text>
             <TextInput
               value={form.scopes}
               onChange={(value) => updateForm({ scopes: value })}
-              onSubmit={() => setStep("authServer")}
+              onSubmit={() => setStep(Step.AuthServer)}
             />
           </>
         )}
 
-        {type === "remote" && step === "authServer" && (
+        {type === "remote" && step === Step.AuthServer && (
           <>
             <Text color={theme.colors.success}>Auth Server URL (optional)</Text>
             <TextInput

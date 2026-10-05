@@ -14,6 +14,7 @@ const mockAuthService = {
   hasValidToken: vi.fn(() => false),
   isTokenExpired: vi.fn(() => false),
   isRefreshable: vi.fn(() => false),
+  ensureValidToken: vi.fn(() => Promise.resolve(false)),
   getToken: vi.fn(),
   getTokenPreview: vi.fn(),
   getValidToken: vi.fn(() => Promise.resolve("refreshed-token")),
@@ -46,6 +47,8 @@ const mockDaemonService = {
   clearLogs: vi.fn(),
   enableStartup: vi.fn(() => ({ success: true })),
   disableStartup: vi.fn(() => ({ success: true })),
+  isStartupEnabled: vi.fn(() => false),
+  getPlatformInfo: vi.fn(() => ({ supported: true, platform: "darwin", type: "launchd" })),
 };
 
 const mockProfileService = {
@@ -122,12 +125,36 @@ describe("CLI auth/daemon commands", () => {
     mockAuthService.getToken.mockReturnValue({ accessToken: "tok", refreshToken: "refresh" });
     mockAuthService.startOAuthFlow.mockResolvedValue({ authUrl: "https://auth", state: "state1" });
     mockAuthService.waitForAuth.mockResolvedValue({ success: true });
+    mockAuthService.ensureValidToken.mockResolvedValue(false);
     mockAuthService.refreshToken.mockResolvedValue({ accessToken: "new", tokenType: "Bearer" });
     mockTestingService.testRemoteServer.mockResolvedValue({ success: true, toolCount: 2 });
     mockDaemonService.startDaemon.mockResolvedValue({ success: true, pid: 999 });
     mockDaemonService.refreshDaemon.mockResolvedValue({ success: true });
     mockDaemonService.stopDaemon.mockResolvedValue({ success: true });
+    mockDaemonService.getStatus.mockResolvedValue({
+      running: false,
+      pid: null,
+      port: 8850,
+      startupEnabled: false,
+      logFile: "/tmp/daemon.log",
+      healthy: false,
+    });
+    mockDaemonService.getLogs.mockReturnValue(["line 1", "line 2"]);
+    mockDaemonService.getPlatformInfo.mockReturnValue({
+      supported: true,
+      platform: "darwin",
+      type: "launchd",
+    });
+    mockDaemonService.isStartupEnabled.mockReturnValue(false);
   });
+
+  const expectProcessExit = async (action: () => Promise<unknown>): Promise<void> => {
+    const exit = vi.spyOn(process, "exit").mockImplementation((code?: string | number | null) => {
+      throw new Error(`process.exit:${code ?? ""}`);
+    });
+    await expect(action()).rejects.toThrow("process.exit:1");
+    exit.mockRestore();
+  };
 
   it("runs auth login without opening a browser", async () => {
     const program = buildAuthProgram();
@@ -183,5 +210,209 @@ describe("CLI auth/daemon commands", () => {
 
     await program.parseAsync(["node", "test", "daemon", "logs", "--clear"]);
     expect(mockDaemonService.clearLogs).toHaveBeenCalled();
+  });
+
+  it("reports auth status in text and JSON modes", async () => {
+    const program = buildAuthProgram();
+
+    mockAuthService.hasValidToken.mockReturnValue(false);
+    mockAuthService.isTokenExpired.mockReturnValue(true);
+    mockAuthService.isRefreshable.mockReturnValue(true);
+    mockAuthService.ensureValidToken.mockResolvedValue(true);
+    mockAuthService.getToken.mockReturnValue({
+      accessToken: "tok",
+      tokenType: "Bearer",
+      expiresAt: Date.now() + 30 * 60 * 1000,
+    });
+    mockAuthService.getTokenPreview.mockReturnValue("tok...view");
+
+    await program.parseAsync(["node", "test", "auth", "status"]);
+    expect(mockAuthService.ensureValidToken).toHaveBeenCalledWith(remoteServer);
+
+    await program.parseAsync(["node", "test", "auth", "status", "--json"]);
+
+    mockConfigService.getRemoteServers.mockReturnValue([]);
+    await program.parseAsync(["node", "test", "auth", "status"]);
+  });
+
+  it("handles auth login short-circuit and failure branches", async () => {
+    const program = buildAuthProgram();
+
+    mockAuthService.hasValidToken.mockReturnValue(true);
+    await program.parseAsync(["node", "test", "auth", "login", remoteServer.id, "--no-browser"]);
+    expect(mockAuthService.startOAuthFlow).not.toHaveBeenCalled();
+
+    mockAuthService.hasValidToken.mockReturnValue(false);
+    mockAuthService.isRefreshable.mockReturnValue(true);
+    mockAuthService.ensureValidToken.mockResolvedValueOnce(true);
+    await program.parseAsync(["node", "test", "auth", "login", remoteServer.id, "--no-browser"]);
+
+    mockAuthService.ensureValidToken.mockResolvedValueOnce(false);
+    mockAuthService.startOAuthFlow.mockResolvedValueOnce(null);
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "auth", "login", remoteServer.id, "--no-browser"])
+    );
+
+    mockConfigService.findServer.mockReturnValueOnce({ server: localServer, type: "local" });
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "auth", "login", localServer.id, "--no-browser"])
+    );
+
+    mockConfigService.findServer.mockReturnValueOnce({
+      server: { ...remoteServer, oauth: { enabled: false } },
+      type: "remote",
+    });
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "auth", "login", remoteServer.id, "--no-browser"])
+    );
+
+    mockAuthService.startOAuthFlow.mockResolvedValueOnce({
+      authUrl: "https://auth",
+      state: "failed",
+    });
+    mockAuthService.waitForAuth.mockResolvedValueOnce({ success: false, error: "denied" });
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "auth", "login", remoteServer.id, "--no-browser"])
+    );
+  });
+
+  it("handles auth logout, login-all, and refresh edge cases", async () => {
+    const program = buildAuthProgram();
+
+    mockAuthService.hasValidToken.mockReturnValue(false);
+    await program.parseAsync(["node", "test", "auth", "logout", remoteServer.id, "--force"]);
+    expect(mockAuthService.removeToken).not.toHaveBeenCalled();
+
+    mockConfigService.getRemoteServers.mockReturnValueOnce([]);
+    await program.parseAsync(["node", "test", "auth", "login-all", "--no-browser"]);
+
+    mockConfigService.getRemoteServers.mockReturnValueOnce([remoteServer]);
+    mockAuthService.hasValidToken.mockReturnValueOnce(true);
+    await program.parseAsync(["node", "test", "auth", "login-all", "--no-browser"]);
+
+    mockConfigService.getRemoteServers.mockReturnValueOnce([remoteServer]);
+    mockAuthService.hasValidToken.mockReturnValue(false);
+    mockAuthService.startOAuthFlow.mockResolvedValueOnce(null);
+    await program.parseAsync(["node", "test", "auth", "login-all", "--no-browser"]);
+
+    mockConfigService.getRemoteServers.mockReturnValueOnce([remoteServer]);
+    mockAuthService.startOAuthFlow.mockResolvedValueOnce({
+      authUrl: "https://auth",
+      state: "bad-state",
+    });
+    mockAuthService.waitForAuth.mockResolvedValueOnce({ success: false, error: "denied" });
+    await program.parseAsync(["node", "test", "auth", "login-all", "--no-browser"]);
+
+    mockAuthService.getToken.mockReturnValueOnce(null);
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "auth", "refresh", remoteServer.id])
+    );
+
+    mockAuthService.getToken.mockReturnValueOnce({ accessToken: "tok", tokenType: "Bearer" });
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "auth", "refresh", remoteServer.id])
+    );
+
+    mockAuthService.getToken.mockReturnValueOnce({
+      accessToken: "tok",
+      refreshToken: "refresh",
+      tokenType: "Bearer",
+    });
+    mockAuthService.refreshToken.mockResolvedValueOnce(null);
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "auth", "refresh", remoteServer.id])
+    );
+  });
+
+  it("reports daemon status, logs, and stop failures", async () => {
+    const program = buildDaemonProgram();
+
+    mockDaemonService.getStatus.mockResolvedValueOnce({
+      running: true,
+      pid: 123,
+      port: 8850,
+      startupEnabled: true,
+      logFile: "/tmp/daemon.log",
+      healthy: true,
+      health: { servers: 2, tools: 5 },
+    });
+    await program.parseAsync(["node", "test", "daemon", "status"]);
+
+    mockDaemonService.getStatus.mockResolvedValueOnce({
+      running: true,
+      pid: 123,
+      port: 8850,
+      startupEnabled: false,
+      logFile: "/tmp/daemon.log",
+      healthy: false,
+      health: { error: "not responding" },
+    });
+    await program.parseAsync(["node", "test", "daemon", "status"]);
+
+    await program.parseAsync(["node", "test", "daemon", "status", "--json"]);
+
+    mockDaemonService.getLogs.mockReturnValueOnce([]);
+    await program.parseAsync(["node", "test", "daemon", "logs"]);
+
+    mockDaemonService.getLogs.mockReturnValueOnce(["line 1", "line 2"]);
+    await program.parseAsync(["node", "test", "daemon", "logs", "--lines", "2"]);
+
+    mockDaemonService.stopDaemon.mockResolvedValueOnce({ success: false, error: "not running" });
+    await expectProcessExit(() => program.parseAsync(["node", "test", "daemon", "stop"]));
+
+    mockDaemonService.refreshDaemon.mockResolvedValueOnce({ success: false, error: "offline" });
+    await expectProcessExit(() => program.parseAsync(["node", "test", "daemon", "refresh"]));
+  });
+
+  it("handles daemon start validation and daemon start failures", async () => {
+    const program = buildDaemonProgram();
+
+    mockConfigService.findServer.mockReturnValueOnce(null);
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "daemon", "start", "missing"])
+    );
+
+    mockProfileService.getProfile.mockReturnValueOnce(null);
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "daemon", "start", "--profile", "missing"])
+    );
+
+    mockProfileService.getProfile.mockReturnValueOnce({ servers: [], remoteServers: ["r1"] });
+    mockDaemonService.startDaemon.mockResolvedValueOnce({ success: false, error: "boom" });
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "daemon", "start", "--profile", "empty-local"])
+    );
+  });
+
+  it("manages daemon startup settings", async () => {
+    const program = buildDaemonProgram();
+
+    await program.parseAsync(["node", "test", "daemon", "startup"]);
+    await program.parseAsync(["node", "test", "daemon", "startup", "status"]);
+
+    await program.parseAsync(["node", "test", "daemon", "startup", "enable"]);
+    expect(mockDaemonService.enableStartup).toHaveBeenCalled();
+
+    await program.parseAsync(["node", "test", "daemon", "startup", "disable"]);
+    expect(mockDaemonService.disableStartup).toHaveBeenCalled();
+
+    mockDaemonService.getPlatformInfo.mockReturnValueOnce({
+      supported: false,
+      platform: "freebsd",
+      type: "unknown",
+    });
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "daemon", "startup", "enable"])
+    );
+
+    mockDaemonService.enableStartup.mockReturnValueOnce({ success: false, error: "denied" });
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "daemon", "startup", "enable"])
+    );
+
+    mockDaemonService.disableStartup.mockReturnValueOnce({ success: false, error: "denied" });
+    await expectProcessExit(() =>
+      program.parseAsync(["node", "test", "daemon", "startup", "disable"])
+    );
   });
 });

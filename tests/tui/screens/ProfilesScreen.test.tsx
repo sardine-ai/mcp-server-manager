@@ -19,6 +19,15 @@ describe("ProfilesScreen", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockProfileService.list.mockReturnValue([
+      { id: "default", name: "Default", isActive: true, includesAll: true, serverCount: 0 },
+      { id: "dev", name: "Development", isActive: false, includesAll: false, serverCount: 2 },
+    ]);
+    mockProfileService.create.mockReturnValue({ success: true });
+    mockProfileService.clone.mockReturnValue({ success: true });
+    mockProfileService.rename.mockReturnValue({ success: true });
+    mockProfileService.delete.mockReturnValue({ success: true });
+    mockProfileService.getServersForProfile.mockReturnValue({ servers: [], remoteServers: [] });
   });
 
   describe("Rendering", () => {
@@ -35,10 +44,12 @@ describe("ProfilesScreen", () => {
       expect(lastFrame()).toContain("Development");
     });
 
-    it("should show profile IDs", () => {
+    it("should show profile IDs when different from name", () => {
       const { lastFrame } = render(<ProfilesScreen onBack={mockOnBack} />);
 
-      expect(lastFrame()).toContain("[default]");
+      // "Default" → "default" matches ID, so [default] is hidden
+      expect(lastFrame()).not.toContain("[default]");
+      // "Development" → "development" ≠ "dev", so [dev] is shown
       expect(lastFrame()).toContain("[dev]");
     });
 
@@ -47,6 +58,32 @@ describe("ProfilesScreen", () => {
 
       // Development profile has 2 servers
       expect(lastFrame()).toContain("2");
+    });
+
+    it("should display server previews and remaining count", () => {
+      mockProfileService.getServersForProfile.mockReturnValueOnce({
+        servers: [
+          { id: "one", name: "One", command: "node", args: [] },
+          { id: "two", name: "Two", command: "node", args: [] },
+          { id: "three", name: "Three", command: "node", args: [] },
+        ],
+        remoteServers: [
+          { id: "four", name: "Four", url: "https://four.example", type: "http" },
+          { id: "five", name: "Five", url: "https://five.example", type: "sse" },
+        ],
+      });
+
+      const { lastFrame } = render(<ProfilesScreen onBack={mockOnBack} />);
+
+      expect(lastFrame()).toContain("One, Two, Three, Four, +1 more");
+    });
+
+    it("should show an empty state when no profiles exist", () => {
+      mockProfileService.list.mockReturnValueOnce([]);
+
+      const { lastFrame } = render(<ProfilesScreen onBack={mockOnBack} />);
+
+      expect(lastFrame()).toContain("No profiles configured");
     });
   });
 
@@ -139,6 +176,66 @@ describe("ProfilesScreen", () => {
       // Should show input prompt
       expect(lastFrame()).toContain("Profile name");
     });
+
+    it("should create a new empty profile from the form", async () => {
+      const { stdin, lastFrame } = render(<ProfilesScreen onBack={mockOnBack} />);
+
+      stdin.write("a");
+      await waitForStateUpdate();
+      stdin.write("n");
+      await waitForStateUpdate();
+      stdin.write("QA Profile");
+      await waitForStateUpdate();
+      stdin.write(KEYS.ENTER);
+      await waitForStateUpdate();
+
+      expect(mockProfileService.create).toHaveBeenCalledWith("qa-profile", "QA Profile");
+      expect(lastFrame()).toContain("Profile 'QA Profile' created");
+    });
+
+    it("should clone from a selected source profile", async () => {
+      const { stdin, lastFrame } = render(<ProfilesScreen onBack={mockOnBack} />);
+
+      stdin.write("a");
+      await waitForStateUpdate();
+      stdin.write("y");
+      await waitForStateUpdate();
+      expect(lastFrame()).toContain("Select Profile to Clone");
+
+      stdin.write(KEYS.DOWN);
+      await waitForStateUpdate();
+      stdin.write(KEYS.ENTER);
+      await waitForStateUpdate();
+      expect(lastFrame()).toContain("Clone Profile: Development");
+
+      stdin.write("QA Clone");
+      await waitForStateUpdate();
+      stdin.write(KEYS.ENTER);
+      await waitForStateUpdate();
+
+      expect(mockProfileService.clone).toHaveBeenCalledWith("dev", "qa-clone", "QA Clone");
+      expect(lastFrame()).toContain("Profile 'QA Clone' cloned");
+    });
+
+    it("should show a create failure message", async () => {
+      mockProfileService.create.mockReturnValueOnce({
+        success: false,
+        error: "profile exists",
+      });
+
+      const { stdin, lastFrame } = render(<ProfilesScreen onBack={mockOnBack} />);
+
+      stdin.write("a");
+      await waitForStateUpdate();
+      stdin.write("n");
+      await waitForStateUpdate();
+      stdin.write("Duplicate");
+      await waitForStateUpdate();
+      stdin.write(KEYS.ENTER);
+      await waitForStateUpdate();
+
+      expect(lastFrame()).toContain("profile exists");
+    });
   });
 
   describe("Delete Profile", () => {
@@ -157,6 +254,20 @@ describe("ProfilesScreen", () => {
       // Should show confirmation
       expect(lastFrame()).toMatch(/delete|confirm/i);
     });
+
+    it("should delete a non-active profile when confirmed", async () => {
+      const { stdin, lastFrame } = render(<ProfilesScreen onBack={mockOnBack} />);
+
+      stdin.write(KEYS.DOWN);
+      await waitForStateUpdate();
+      stdin.write("d");
+      await waitForStateUpdate();
+      stdin.write("y");
+      await waitForStateUpdate();
+
+      expect(mockProfileService.delete).toHaveBeenCalledWith("dev");
+      expect(lastFrame()).toContain("Profile deleted");
+    });
   });
 
   describe("Rename Profile", () => {
@@ -169,6 +280,34 @@ describe("ProfilesScreen", () => {
       await waitForStateUpdate();
 
       expect(lastFrame()).toContain("Rename Profile");
+    });
+
+    it("should rename the selected profile when submitted", async () => {
+      const { stdin, lastFrame } = render(<ProfilesScreen onBack={mockOnBack} />);
+
+      stdin.write("r");
+      await waitForStateUpdate();
+      stdin.write(KEYS.ENTER);
+      await waitForStateUpdate();
+
+      expect(mockProfileService.rename).toHaveBeenCalledWith("default", "Default");
+      expect(lastFrame()).toContain("Profile renamed to 'Default'");
+    });
+
+    it("should show a rename failure message", async () => {
+      mockProfileService.rename.mockReturnValueOnce({
+        success: false,
+        error: "rename failed",
+      });
+
+      const { stdin, lastFrame } = render(<ProfilesScreen onBack={mockOnBack} />);
+
+      stdin.write("r");
+      await waitForStateUpdate();
+      stdin.write(KEYS.ENTER);
+      await waitForStateUpdate();
+
+      expect(lastFrame()).toContain("rename failed");
     });
   });
 

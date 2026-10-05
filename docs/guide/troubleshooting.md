@@ -102,7 +102,7 @@ MCP Server Manager auto-detects clients based on config file locations. If a cli
 | Cursor         | `~/.cursor/`                                          |
 | Windsurf       | `~/.codeium/windsurf/mcp_config.json`                 |
 | VS Code        | `~/.vscode/` or `~/Library/Application Support/Code/` |
-| Zed            | `~/.config/zed/` |
+| Zed            | `~/.config/zed/`                                      |
 | Claude Code    | `~/.claude/`                                          |
 | Codex          | `~/.codex/`                                           |
 | Gemini CLI     | `~/.gemini/`                                          |
@@ -276,7 +276,7 @@ DEBUG=mcpsm* mcpsm <command>
 If you can't resolve the issue:
 
 1. Run `mcpsm doctor` and copy the output
-2. Check the [GitHub Issues](https://github.com/MateusTorquato/mcp-server-manager/issues)
+2. Check the [GitHub Issues](https://github.com/sardine-ai/mcp-server-manager/issues)
 3. Open a new issue with:
    - Your OS and version
    - Node.js version (`node --version`)

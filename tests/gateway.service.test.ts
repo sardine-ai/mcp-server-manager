@@ -10,8 +10,8 @@ const mockConfigService = {
   reload: vi.fn(),
   getPort: vi.fn(() => 8850),
   getSelectionState: vi.fn(() => ({ local: [], remote: [] })),
-  getEnabledLocalServers: vi.fn(() => []),
-  getEnabledRemoteServers: vi.fn(() => []),
+  getLocalServers: vi.fn(() => []),
+  getRemoteServers: vi.fn(() => []),
 };
 
 const mockAuthService = {
@@ -57,7 +57,7 @@ describe("GatewayService", () => {
 
   it("re-binds the HTTP server when port changes on refresh", async () => {
     const close = vi.fn((cb: (err?: Error | null) => void) => cb(null));
-    const listen = vi.fn((_port: number, cb: () => void) => cb());
+    const listen = vi.fn((_port: number, _host: string, cb: () => void) => cb());
     const mockServer = {
       close,
       listen,
@@ -81,7 +81,7 @@ describe("GatewayService", () => {
 
     expect(result.success).toBe(true);
     expect(close).toHaveBeenCalled();
-    expect(listen).toHaveBeenCalledWith(4000, expect.any(Function));
+    expect(listen).toHaveBeenCalledWith(4000, "127.0.0.1", expect.any(Function));
     expect(getGatewayStatus().port).toBe(4000);
     expect(mockAuthService.reload).toHaveBeenCalled();
     expect(mockConfigService.reload).toHaveBeenCalled();

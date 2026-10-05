@@ -79,7 +79,7 @@ function executeLandingScripts(html) {
   )
   
   // Close the IIFE at the end
-  scriptContent = scriptContent.replace(/\}\s*\)\s*$/, '})()')
+  scriptContent = scriptContent.replace(/\}\s*\)\s*;?\s*$/, '})()')
   
   try {
     // Execute the entire script (includes all function definitions)

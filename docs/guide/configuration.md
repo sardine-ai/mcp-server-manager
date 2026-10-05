@@ -17,6 +17,16 @@ All mcpsm settings are stored in `~/.mcp-manager/`:
 | `profiles.json`     | Server profiles (grouping by context)     |
 | `clients.json`      | Client connection state cache             |
 
+On macOS and Linux, mcpsm creates `~/.mcp-manager/` with private directory
+permissions (`0700`) and writes mcpsm-owned JSON files with private file
+permissions (`0600`). Existing files with broader permissions are tightened
+when mcpsm loads or saves them.
+
+`config.json` can contain secrets such as local server environment variables,
+remote bearer tokens, custom headers, and OAuth client secrets. OAuth runtime
+tokens are stored separately in `~/.mcp-manager/oauth-tokens.json` with the same
+private file permissions.
+
 ## config.json
 
 Main configuration file containing server definitions:

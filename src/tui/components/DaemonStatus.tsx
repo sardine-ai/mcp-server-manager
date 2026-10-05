@@ -1,6 +1,5 @@
 import React from "react";
 import { Box, Text } from "ink";
-import Spinner from "ink-spinner";
 import { useDaemonStatus } from "../hooks/useDaemonStatus.js";
 import { useTheme } from "../theme/index.js";
 
@@ -13,56 +12,34 @@ export function DaemonStatus({ compact = false, polling = false }: DaemonStatusP
   const { theme } = useTheme();
   const { status, isLoading } = useDaemonStatus({ polling });
 
-  if (isLoading || !status) {
-    return (
-      <Box gap={1}>
-        <Text color={theme.colors.info}>
-          <Spinner type="dots" />
-        </Text>
-        {!compact && <Text dimColor>Checking daemon...</Text>}
-      </Box>
-    );
-  }
-
-  if (!status.running) {
-    return (
-      <Box gap={1}>
-        <Text color={theme.colors.error}>●</Text>
-        <Text color={theme.colors.error}>{compact ? "Stopped" : "Daemon stopped"}</Text>
-      </Box>
-    );
-  }
-
-  if (status.healthy) {
-    if (compact) {
-      return (
-        <Box gap={1}>
-          <Text color={theme.colors.success}>●</Text>
-          <Text color={theme.colors.success}>
-            Healthy ({status.health?.servers ?? 0} srv, {status.health?.tools ?? 0} tools)
-          </Text>
-        </Box>
-      );
+  const renderStatus = (): { indicator: string; color: string; label: string } => {
+    if (isLoading || !status) {
+      return { indicator: "○", color: theme.colors.info, label: compact ? "Loading..." : "Checking daemon..." };
     }
+    if (!status.running) {
+      return { indicator: "●", color: theme.colors.error, label: compact ? "Stopped" : "Daemon stopped" };
+    }
+    if (status.healthy) {
+      const srvCount = status.health?.servers ?? 0;
+      const toolCount = status.health?.tools ?? 0;
+      if (compact) {
+        return { indicator: "●", color: theme.colors.success, label: `Healthy (${srvCount} srv, ${toolCount} tools)` };
+      }
+      return { indicator: "●", color: theme.colors.success, label: `Healthy (PID: ${status.pid}, ${srvCount} servers, ${toolCount} tools)` };
+    }
+    if (compact) {
+      return { indicator: "●", color: theme.colors.warning, label: "Unhealthy" };
+    }
+    return { indicator: "●", color: theme.colors.warning, label: `Running but unhealthy (PID: ${status.pid})` };
+  };
 
-    return (
-      <Box gap={1}>
-        <Text color={theme.colors.success}>●</Text>
-        <Text color={theme.colors.success}>
-          Healthy (PID: {status.pid}, {status.health?.servers ?? 0} servers,{" "}
-          {status.health?.tools ?? 0} tools)
-        </Text>
-      </Box>
-    );
-  }
+  const { indicator, color, label } = renderStatus();
 
   return (
     <Box gap={1}>
-      <Text color={theme.colors.warning}>●</Text>
-      <Text color={theme.colors.warning}>
-        {compact ? "Unhealthy" : `Running but unhealthy (PID: ${status.pid})`}
-      </Text>
-      {!compact && (
+      <Text color={color}>{indicator}</Text>
+      <Text color={color}>{label}</Text>
+      {!compact && !isLoading && status && !status.healthy && status.running && (
         <Text color={theme.colors.error}>{status.health?.error || "Not responding"}</Text>
       )}
     </Box>

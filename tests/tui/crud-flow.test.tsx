@@ -75,8 +75,8 @@ describe("TUI CRUD with sardine config", () => {
     mockConfigService.getRemoteServers.mockImplementation(() => remoteServers);
     mockConfigService.getToolFilters.mockReturnValue({});
     mockConfigService.getSelectionState.mockImplementation(() => ({
-      local: localServers.filter((s) => !s.disabled).map((s) => s.id),
-      remote: remoteServers.filter((s) => !s.disabled).map((s) => `remote:${s.id}`),
+      local: localServers.map((s) => s.id),
+      remote: remoteServers.map((s) => `remote:${s.id}`),
     }));
     mockConfigService.saveSelectionState.mockImplementation(() => {});
     mockConfigService.generateServerId.mockImplementation((name: string) =>
@@ -120,33 +120,6 @@ describe("TUI CRUD with sardine config", () => {
       }
     );
 
-    mockConfigService.enableServer.mockImplementation((id: string) => {
-      const local = localServers.find((s) => s.id === id);
-      if (local) {
-        local.disabled = false;
-        return { success: true };
-      }
-      const remote = remoteServers.find((s) => s.id === id);
-      if (remote) {
-        remote.disabled = false;
-        return { success: true };
-      }
-      return { success: false, error: "not found" };
-    });
-    mockConfigService.disableServer.mockImplementation((id: string) => {
-      const local = localServers.find((s) => s.id === id);
-      if (local) {
-        local.disabled = true;
-        return { success: true };
-      }
-      const remote = remoteServers.find((s) => s.id === id);
-      if (remote) {
-        remote.disabled = true;
-        return { success: true };
-      }
-      return { success: false, error: "not found" };
-    });
-
     mockConfigService.getPort.mockReturnValue(8850);
     mockConfigService.getPaths.mockReturnValue({
       configDir: "/tmp/test",
@@ -179,7 +152,7 @@ describe("TUI CRUD with sardine config", () => {
     // Open add wizard
     stdin.write("a");
     await waitForStateUpdate(200);
-    expect(lastFrame()).toContain("Add New MCP Server");
+    expect(lastFrame()).toContain("Add Server");
 
     stdin.write("sardineInternalSandbox");
     stdin.write(KEYS.ENTER);

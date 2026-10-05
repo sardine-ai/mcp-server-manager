@@ -3,6 +3,12 @@ name: Publish to npm
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish, for example v2.6.1
+        required: true
+        type: string
 
 jobs:
   publish:
@@ -11,6 +17,8 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,14 +33,33 @@ jobs:
 
       - name: Update package.json version
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${RELEASE_TAG}"
           VERSION="${VERSION#v}"
+
+          if [ -z "$VERSION" ]; then
+            echo "Missing release version"
+            exit 1
+          fi
+
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+
+          if [ "$CURRENT_VERSION" = "$VERSION" ]; then
+            echo "package.json is already at ${VERSION}"
+            exit 0
+          fi
+
           npm version "$VERSION" --no-git-tag-version
 
       - name: Commit version bump
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${RELEASE_TAG}"
           VERSION="${VERSION#v}"
+
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "No version bump changes to commit"
+            exit 0
+          fi
+
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add package.json package-lock.json

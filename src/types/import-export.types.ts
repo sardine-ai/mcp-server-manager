@@ -17,8 +17,8 @@ export interface ImportedServer {
   // Remote server fields
   url?: string;
   type?: TransportType;
+  headers?: Record<string, string>;
   bearerToken?: string;
-  disabled?: boolean;
 }
 
 /** Export format types */
@@ -53,8 +53,6 @@ export interface ExportOptions {
   format?: ExportFormat;
   /** Output file path */
   outputPath?: string;
-  /** Include disabled servers */
-  includeDisabled?: boolean;
 }
 
 /** Import options */

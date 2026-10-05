@@ -11,6 +11,34 @@ interface VersionInfo {
   current: string;
   latest: string;
   hasUpdate: boolean;
+  installCommand: string;
+}
+
+function detectPackageManager(): string {
+  try {
+    const execPath = process.argv[1] || "";
+
+    if (execPath.includes(".bun/")) return "bun";
+    if (execPath.includes("/pnpm/") || execPath.includes("/pnpm-global/")) return "pnpm";
+    if (execPath.includes("/yarn/") || execPath.includes("/.yarn/")) return "yarn";
+  } catch {
+    // ignore
+  }
+
+  return "npm";
+}
+
+function getInstallCommand(pm: string): string {
+  switch (pm) {
+    case "bun":
+      return "bun install -g mcp-server-manager";
+    case "pnpm":
+      return "pnpm install -g mcp-server-manager";
+    case "yarn":
+      return "yarn global add mcp-server-manager";
+    default:
+      return "npm install -g mcp-server-manager";
+  }
 }
 
 class VersionService {
@@ -52,6 +80,8 @@ class VersionService {
    * Perform the actual version check against npm registry
    */
   private async performVersionCheck(): Promise<VersionInfo> {
+    const installCommand = getInstallCommand(detectPackageManager());
+
     try {
       const response = await fetch("https://registry.npmjs.org/mcp-server-manager/latest", {
         headers: {
@@ -71,14 +101,15 @@ class VersionService {
         current: VERSION,
         latest: latestVersion,
         hasUpdate,
+        installCommand,
       };
     } catch (error) {
       log.debug("Failed to check for updates:", error);
-      // Return no update available on error
       return {
         current: VERSION,
         latest: VERSION,
         hasUpdate: false,
+        installCommand,
       };
     }
   }

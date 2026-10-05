@@ -194,7 +194,7 @@ Examples:
   mcpsm clients sync       Sync to clients
 
 Documentation:
-  https://mateustorquato.github.io/mcp-server-manager/docs/
+  https://sardine-ai.github.io/mcp-server-manager/docs/
 ```
 
 ---

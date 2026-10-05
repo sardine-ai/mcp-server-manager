@@ -42,7 +42,7 @@ try {
         Write-Host "✓ MCP Server Manager installed successfully!" -ForegroundColor Green
         Write-Host ""
         Write-Host "Run 'mcpsm' to start the TUI or 'mcpsm --help' for CLI commands."
-        Write-Host "Documentation: https://mateustorquato.github.io/mcp-server-manager/docs/"
+        Write-Host "Documentation: https://sardine-ai.github.io/mcp-server-manager/docs/"
     } else {
         throw "Command not found"
     }

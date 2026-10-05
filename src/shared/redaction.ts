@@ -39,6 +39,12 @@ export function redactServerForOutput(
     remote.bearerToken = REDACTED_VALUE;
   }
 
+  if (remote.headers) {
+    remote.headers = Object.fromEntries(
+      Object.keys(remote.headers).map((key) => [key, REDACTED_VALUE])
+    );
+  }
+
   return remote;
 }
 

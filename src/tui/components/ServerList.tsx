@@ -41,20 +41,16 @@ export function ServerList({
       {servers.map((server, idx) => {
         const isCurrent = isActiveSection && idx === selectedIndex;
         const serverId = isRemote ? `remote:${server.id}` : server.id;
-        const isSelected = selectedServers.has(serverId);
-        const isDisabled = server.disabled;
+        const isEnabled = selectedServers.has(serverId);
         const toolCount = toolCounts.get(serverId) ?? 0;
 
-        // Determine checkbox style
-        const checkbox = isSelected ? "[✓]" : "[ ]";
-        const checkboxColor = isSelected ? "green" : "gray";
+        const checkbox = isEnabled ? "[✓]" : "[ ]";
+        const checkboxColor = isEnabled ? "green" : "gray";
 
-        // Determine name style
-        const nameColor = isCurrent ? "magenta" : isDisabled ? "gray" : undefined;
+        const nameColor = isCurrent ? "magenta" : !isEnabled ? "gray" : undefined;
 
-        // Always show tool count, regardless of disabled state
         const statusText = `${toolCount} tools`;
-        const statusColor = isDisabled ? "yellow" : "gray";
+        const statusColor = !isEnabled ? "gray" : undefined;
 
         return (
           <Box key={server.id} gap={1}>

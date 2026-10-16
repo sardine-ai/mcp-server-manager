@@ -7,10 +7,22 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render } from "../setup.js";
 import { mockClientService, waitForStateUpdate, KEYS } from "../setup.js";
 
+const projectClientService = vi.hoisted(() => ({
+  detectClients: vi.fn(),
+  connectClient: vi.fn(() => ({ success: true })),
+  disconnectClient: vi.fn(() => ({ success: true })),
+  openClientConfig: vi.fn(() => ({ success: true })),
+}));
+
 // Setup mocks before importing component
 vi.mock("../../../src/services/client.service.js", () => ({
   getClientService: vi.fn(() => mockClientService),
+  ClientService: vi.fn(function () {
+    return projectClientService;
+  }),
 }));
+
+import { ClientService } from "../../../src/services/client.service.js";
 
 import { ClientsScreen } from "../../../src/tui/screens/ClientsScreen.js";
 
@@ -19,6 +31,9 @@ describe("ClientsScreen", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(ClientService).mockImplementation(function () {
+      return projectClientService;
+    });
   });
 
   describe("Rendering", () => {
@@ -117,6 +132,9 @@ describe("ClientsScreen", () => {
 
       // Reset mocks
       vi.clearAllMocks();
+      vi.mocked(ClientService).mockImplementation(function () {
+        return projectClientService;
+      });
 
       // Try to connect - should not call service methods for not-installed
       stdin.write(KEYS.ENTER);
@@ -209,6 +227,24 @@ describe("ClientsScreen", () => {
       // Second argument (profileId) should be undefined
       expect(allCalls[0][1]).toBeUndefined();
     });
+  });
+
+  it("switches to the current folder and uses its service for the selected profile", async () => {
+    projectClientService.detectClients.mockReturnValue([mockClientService.detectClients()[1]]);
+    const { stdin, lastFrame } = render(
+      <ClientsScreen onBack={mockOnBack} currentProfileId="dev" />
+    );
+    stdin.write("s");
+    await waitForStateUpdate();
+    expect(lastFrame()).toContain("Current folder");
+    expect(projectClientService.detectClients).toHaveBeenCalledWith("dev");
+    stdin.write(KEYS.SPACE);
+    await waitForStateUpdate();
+    expect(projectClientService.connectClient).toHaveBeenCalledWith("cursor", "dev");
+    expect(mockClientService.connectClient).not.toHaveBeenCalled();
+    stdin.write("s");
+    await waitForStateUpdate();
+    expect(lastFrame()).toContain("Scope: Global");
   });
 
   describe("Help Text", () => {

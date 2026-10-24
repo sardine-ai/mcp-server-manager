@@ -11,7 +11,7 @@ import { createMenuSections } from "../utils/menu.js";
 import { getConfigService } from "../../services/config.service.js";
 import { getAuthService } from "../../services/auth.service.js";
 import { getTestingService } from "../../services/testing.service.js";
-import { getDaemonService } from "../../services/daemon.service.js";
+import { refreshDaemonIfRunning as refreshRunningDaemon } from "../../services/daemon-refresh.js";
 import type { RemoteServer, AuthStatus } from "../../types/index.js";
 import { useTheme } from "../theme/index.js";
 
@@ -47,13 +47,12 @@ export function AuthScreen({
   const [currentAuthServer, setCurrentAuthServer] = useState<string | null>(null);
   const [message, setMessage] = useState<string>("");
   const [confirmRevoke, setConfirmRevoke] = useState<{ id: string; name: string } | null>(null);
-  const refreshDaemonIfRunning = useCallback((context: string) => {
-    const daemonService = getDaemonService();
-    if (daemonService.isDaemonRunning().running) {
-      daemonService.refreshDaemon().catch((error) => {
-        console.error(`Failed to refresh daemon after ${context}:`, error);
-      });
-    }
+  const refreshDaemonIfRunning = useCallback((_context: string) => {
+    refreshRunningDaemon().then((result) => {
+      if (!result.success) console.error("Daemon refresh failed: " + result.error);
+    }).catch((error) => {
+      console.error("Daemon refresh failed:", error);
+    });
   }, []);
 
   // Load servers and their auth status

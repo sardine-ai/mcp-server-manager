@@ -132,6 +132,33 @@ describe("App Component", () => {
   });
 
   describe("Navigation Between Screens", () => {
+    it("refreshes once after editing and ignores obsolete background completion", async () => {
+      let complete: (() => void) | undefined;
+      mockConfigService.getLocalServers.mockReturnValue([sampleLocalServers[0]]);
+      mockDaemonService.isDaemonRunning.mockReturnValue({ running: true, pid: 123 });
+      mockTestingService.autoTestUnknownServers.mockImplementationOnce(() => new Promise<void>((resolve) => { complete = resolve; }));
+      const { stdin, lastFrame, unmount } = render(<App />);
+      try {
+        await waitForStateUpdate();
+        mockDaemonService.refreshDaemon.mockClear();
+        stdin.write("e");
+        await waitForStateUpdate();
+        expect(lastFrame()).toContain("Edit MCP Server");
+        for (let step = 0; step < 4; step++) {
+          stdin.write(KEYS.ENTER);
+          await waitForStateUpdate();
+        }
+        expect(mockConfigService.updateLocalServer).toHaveBeenCalledOnce();
+        complete?.();
+        await waitForStateUpdate();
+        expect(mockDaemonService.refreshDaemon).toHaveBeenCalledOnce();
+        expect(lastFrame()).toContain("updated");
+      } finally {
+        unmount();
+        mockDaemonService.isDaemonRunning.mockReturnValue({ running: false, pid: null });
+      }
+    });
+
     it("should navigate to add server screen on A key", async () => {
       const { lastFrame, stdin } = render(<App />);
 

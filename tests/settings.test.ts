@@ -44,16 +44,38 @@ describe("SettingsService", () => {
       expect(settings.editor).toBeDefined();
     });
 
-    it("should load existing settings", () => {
+    it("prefers the canonical config port over legacy settings", () => {
       fs.writeFileSync(path.join(testConfigDir, "settings.json"), JSON.stringify({ port: 9000 }));
 
       settingsService = new SettingsService();
       const settings = settingsService.getAll();
 
-      expect(settings.port).toBe(9000);
+      expect(settings.port).toBe(8850);
       // Should merge with defaults
       expect(settings.editor).toBeDefined();
     });
+  });
+
+  it.each([undefined, {}, { port: 0 }])(
+    "migrates settings-only port when config is %j",
+    (config) => {
+      if (config === undefined) fs.rmSync(path.join(testConfigDir, "config.json"));
+      else fs.writeFileSync(path.join(testConfigDir, "config.json"), JSON.stringify(config));
+      fs.writeFileSync(
+        path.join(testConfigDir, "settings.json"),
+        JSON.stringify({ port: 9100, editor: "nano" })
+      );
+      const settings = new SettingsService();
+      expect(settings.get("port")).toBe(9100);
+      settings.set("editor", "vim");
+      expect(
+        JSON.parse(fs.readFileSync(path.join(testConfigDir, "settings.json"), "utf8"))
+      ).toEqual({ editor: "vim" });
+    }
+  );
+
+  it.each(["9000abc", "9000.5", "", "70000", [9000], true])("rejects invalid port %j", (port) => {
+    expect(new SettingsService().set("port", port).success).toBe(false);
   });
 
   describe("get", () => {
@@ -111,7 +133,7 @@ describe("SettingsService", () => {
     it("should fail for invalid number", () => {
       const result = settingsService.set("port", "not-a-number");
       expect(result.success).toBe(false);
-      expect(result.error).toContain("Invalid number");
+      expect(result.error).toContain("integer");
     });
   });
 

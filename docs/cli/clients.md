@@ -35,17 +35,17 @@ mcpsm clients disconnect cursor --scope project
 
 Project files are created relative to the directory where you run mcpsm. Run from the folder opened by your client, usually the project root. Project connections do not change global configs, and existing project settings and other servers are preserved. Existing configs that cannot be parsed are left untouched and return an error; this includes commented global JSON files that the global parser does not support. JSON comments and formatting are not retained when saving.
 
-| Client | Project config |
-| --- | --- |
-| [Cursor](https://docs.cursor.com/context/model-context-protocol) | `.cursor/mcp.json` |
-| [Kiro](https://kiro.dev/docs/mcp/configuration/) | `.kiro/settings/mcp.json` |
-| [VS Code](https://code.visualstudio.com/docs/agent-customization/mcp-servers) | `.vscode/mcp.json` |
-| [Claude Code](https://code.claude.com/docs/en/mcp) | `.mcp.json` |
-| [Codex](https://developers.openai.com/codex/config-basic/) | `.codex/config.toml` |
-| [Gemini](https://geminicli.com/docs/get-started/configuration/) | `.gemini/settings.json` |
-| [Zed](https://github.com/zed-industries/zed/blob/main/crates/settings_content/src/project.rs) | `.zed/settings.json` |
-| [OpenCode](https://opencode.ai/docs/config/) | `opencode.json` (existing `opencode.jsonc` is also supported) |
-| [Antigravity](https://www.antigravity.google/docs/mcp) | `.agents/mcp_config.json` |
+| Client                                                                                        | Project config                                                |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [Cursor](https://docs.cursor.com/context/model-context-protocol)                              | `.cursor/mcp.json`                                            |
+| [Kiro](https://kiro.dev/docs/mcp/configuration/)                                              | `.kiro/settings/mcp.json`                                     |
+| [VS Code](https://code.visualstudio.com/docs/agent-customization/mcp-servers)                 | `.vscode/mcp.json`                                            |
+| [Claude Code](https://code.claude.com/docs/en/mcp)                                            | `.mcp.json`                                                   |
+| [Codex](https://developers.openai.com/codex/config-basic/)                                    | `.codex/config.toml`                                          |
+| [Gemini](https://geminicli.com/docs/get-started/configuration/)                               | `.gemini/settings.json`                                       |
+| [Zed](https://github.com/zed-industries/zed/blob/main/crates/settings_content/src/project.rs) | `.zed/settings.json`                                          |
+| [OpenCode](https://opencode.ai/docs/config/)                                                  | `opencode.json` (existing `opencode.jsonc` is also supported) |
+| [Antigravity](https://www.antigravity.google/docs/mcp)                                        | `.agents/mcp_config.json`                                     |
 
 Claude Desktop and Windsurf remain global only and are excluded from the project list. Clients may require approval or project trust before loading local MCP configuration. Codex requires a trusted project; Claude Code asks to approve project MCP servers.
 

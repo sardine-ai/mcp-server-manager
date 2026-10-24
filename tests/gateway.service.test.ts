@@ -59,6 +59,7 @@ describe("GatewayService", () => {
     const close = vi.fn((cb: (err?: Error | null) => void) => cb(null));
     const listen = vi.fn((_port: number, _host: string, cb: () => void) => cb());
     const mockServer = {
+      listening: true,
       close,
       listen,
       once: vi.fn(),

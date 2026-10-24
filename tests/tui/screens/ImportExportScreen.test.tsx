@@ -195,6 +195,22 @@ describe("ImportExportScreen", () => {
       expect(lastFrame()).toContain("Added: 1");
     });
 
+    it("shows successful counts and rejected operations in a partial import", async () => {
+      mockImportExportService.mergeServersWithDecisions.mockReturnValueOnce({
+        added: 1, updated: 0, skipped: 0, merged: 0,
+        errors: [{ serverId: "rejected", error: "invalid ID" }],
+      });
+      const { stdin, lastFrame } = render(<ImportExportScreen onBack={mockOnBack} />);
+      stdin.write(KEYS.ENTER);
+      await waitForStateUpdate();
+      await submitInput(stdin, "/tmp/servers.json");
+      stdin.write(KEYS.ENTER);
+      await waitForStateUpdate();
+      expect(lastFrame()).toContain("Import completed with errors");
+      expect(lastFrame()).toContain("Added: 1");
+      expect(lastFrame()).toContain("rejected: invalid ID");
+    });
+
     it("should show an import error result", async () => {
       mockImportExportService.importFromFile.mockReturnValueOnce({
         success: false,

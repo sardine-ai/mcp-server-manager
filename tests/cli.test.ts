@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { execSync } from "child_process";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { execSync, spawnSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -8,7 +8,45 @@ import os from "os";
 const testConfigDir = path.join(os.tmpdir(), "mcpsm-cli-test-" + Date.now());
 
 describe("CLI Integration Tests", () => {
+  it("reports a partial import with an unsuccessful exit status", () => {
+    const file = path.join(testConfigDir, "import.json");
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        servers: [
+          { id: "INVALID ID", name: "Invalid", command: "node" },
+          { id: "valid", name: "Valid", command: "node" },
+        ],
+      })
+    );
+    const result = spawnSync(process.execPath, ["bin/cli.js", "import", file, "--skip"], {
+      encoding: "utf8",
+      env: { ...process.env, MCP_MANAGER_CONFIG_DIR: testConfigDir },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("Added: 1");
+    expect(result.stderr).toContain("INVALID ID");
+    expect(
+      JSON.parse(fs.readFileSync(path.join(testConfigDir, "config.json"), "utf8")).servers.map(
+        (server: { id: string }) => server.id
+      )
+    ).toEqual(["valid"]);
+  });
+
+  it("reports malformed storage without replacing it", () => {
+    const file = path.join(testConfigDir, "config.json");
+    fs.writeFileSync(file, "{broken");
+    const result = spawnSync(process.execPath, ["bin/cli.js", "list"], {
+      encoding: "utf8",
+      env: { ...process.env, MCP_MANAGER_CONFIG_DIR: testConfigDir },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(file);
+    expect(fs.readFileSync(file, "utf8")).toBe("{broken");
+  });
+
   beforeEach(() => {
+    vi.stubEnv("MCP_MANAGER_CONFIG_DIR", testConfigDir);
     // Create test config directory
     if (!fs.existsSync(testConfigDir)) {
       fs.mkdirSync(testConfigDir, { recursive: true });
@@ -27,6 +65,7 @@ describe("CLI Integration Tests", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     // Cleanup
     if (fs.existsSync(testConfigDir)) {
       fs.rmSync(testConfigDir, { recursive: true, force: true });

@@ -27,6 +27,9 @@ dist/
 # VitePress cache
 docs/.vitepress/cache/
 
+# Local engineering plans
+/docs/plans/
+
 # TODO file for tracking planned features
 TODO.md
 .claude/settings.local.json

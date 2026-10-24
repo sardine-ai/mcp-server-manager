@@ -17,6 +17,17 @@ describe("ImportExportService", () => {
   let importExportService: ImportExportService;
   let configService: ConfigService;
 
+  it("reports real validation failures without counting them as imported", () => {
+    const result = importExportService.mergeServers([
+      { id: "INVALID ID", name: "Invalid", serverType: "local", command: "node" },
+      { id: "new-valid", name: "Valid", serverType: "local", command: "node" },
+    ]);
+    expect(result.added).toBe(1);
+    expect(result.errors?.[0]).toMatchObject({ serverId: "INVALID ID" });
+    expect(configService.findLocalServer("INVALID ID")).toBeUndefined();
+    expect(configService.findLocalServer("new-valid")).toBeDefined();
+  });
+
   beforeEach(() => {
     process.env.MCP_MANAGER_CONFIG_DIR = testConfigDir;
     resetConfigService();

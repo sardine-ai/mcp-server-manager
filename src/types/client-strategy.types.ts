@@ -143,6 +143,8 @@ export interface IClientStrategy {
 
   // === High-Level Operations ===
 
+  updateGatewayPort(port: number): OperationResult;
+
   /**
    * Connect the client to MCPSM
    */

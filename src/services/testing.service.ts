@@ -1,11 +1,8 @@
+import { createMcpConnection, closeMcpConnection } from "./mcp-connection.js";
 /**
  * Testing service - tests MCP servers and discovers tools
  */
 
-import { spawn, ChildProcess } from "child_process";
-import { TextDecoder } from "util";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type {
   LocalServer,
   RemoteServer,
@@ -18,30 +15,9 @@ import type {
 } from "../types/index.js";
 import { getConfigService } from "./config.service.js";
 import { getAuthService } from "./auth.service.js";
-import { getEnvironmentService } from "./environment.service.js";
 import { createLogger } from "../shared/logger.js";
 
 const log = createLogger("TestingService");
-
-/** MCP request structure */
-interface McpRequest {
-  jsonrpc: string;
-  id: number;
-  method: string;
-  params: Record<string, unknown>;
-}
-
-/** MCP tools response */
-interface McpToolsResponse {
-  result?: {
-    tools?: Array<{
-      name: string;
-      description?: string;
-      inputSchema?: Record<string, unknown>;
-      annotations?: ToolAnnotations;
-    }>;
-  };
-}
 
 /** Extended test result with auth info */
 export interface ExtendedServerTestResult extends ServerTestResult {
@@ -62,30 +38,6 @@ export class TestingService {
   private readonly testTimeout = 8000; // 8 seconds timeout per server
   private authCallback: AuthCallback | null = null;
   private pendingAuthServers: Set<string> = new Set();
-
-  /** Create initialize request */
-  private createInitRequest(): McpRequest {
-    return {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "initialize",
-      params: {
-        protocolVersion: "2024-11-05",
-        capabilities: {},
-        clientInfo: { name: "mcp-tester", version: "1.0.0" },
-      },
-    };
-  }
-
-  /** Create tools list request */
-  private createToolsListRequest(): McpRequest {
-    return {
-      jsonrpc: "2.0",
-      id: 2,
-      method: "tools/list",
-      params: {},
-    };
-  }
 
   /** Count tokens for a tool (simplified) */
   private countToolTokens(tool: {
@@ -153,120 +105,92 @@ export class TestingService {
 
   /** Test a local STDIO server */
   async testLocalServer(server: LocalServer): Promise<ServerTestResult> {
-    return new Promise((resolve) => {
-      const filterId = server.id;
-      let proc: ChildProcess;
-      let stdout = "";
-      let resolved = false;
+    return this.testConnection(server);
+  }
 
-      const cleanup = (): void => {
-        if (!resolved) {
-          resolved = true;
-          try {
-            proc?.kill();
-          } catch (error) {
-            log.debug("Failed to kill process:", error);
-          }
-        }
-      };
-
-      const timeout = setTimeout(() => {
-        cleanup();
-        this.updateToolFilter(filterId, [], "Timeout");
-        resolve({ success: false, error: "Timeout", toolCount: 0 });
+  private async testConnection(
+    server: LocalServer | RemoteServer,
+    skipAuth = false
+  ): Promise<ExtendedServerTestResult> {
+    const remote = "url" in server;
+    const filterId = remote ? "remote:" + server.id : server.id;
+    const controller = new AbortController();
+    const abortCleanups: Array<() => void> = [];
+    let unauthorized: globalThis.Response | undefined;
+    let connection: ReturnType<typeof createMcpConnection> | undefined;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      deadline = setTimeout(() => {
+        controller.abort();
+        reject(new Error("Timeout"));
       }, this.testTimeout);
-
-      try {
-        // Get environment service to detect shell
-        const envService = getEnvironmentService();
-        const shellCommand = envService.getShellCommand();
-
-        // If we have zsh available and the command is a shell script or uses shell features,
-        // run it through zsh for better compatibility
-        if (
-          envService.shouldUseZsh() &&
-          (server.command.includes("/") || server.command === "sh" || server.command === "bash")
-        ) {
-          // Run command through zsh
-          const fullCommand = server.args
-            ? `${server.command} ${server.args.join(" ")}`
-            : server.command;
-          proc = spawn(shellCommand, ["-c", fullCommand], {
-            env: { ...process.env, ...(server.env || {}) },
-            stdio: ["pipe", "pipe", "pipe"],
-          });
-        } else {
-          // Use direct spawn as before
-          proc = spawn(server.command, server.args, {
-            env: { ...process.env, ...(server.env || {}) },
-            stdio: ["pipe", "pipe", "pipe"],
-          });
-        }
-      } catch (err) {
-        clearTimeout(timeout);
-        const error = err instanceof Error ? err.message : "Spawn error";
-        this.updateToolFilter(filterId, [], error);
-        resolve({ success: false, error, toolCount: 0 });
-        return;
-      }
-
-      proc.stdout?.on("data", (data: Buffer) => {
-        stdout += data.toString();
-
-        const lines = stdout.split("\n");
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const msg = JSON.parse(line) as McpToolsResponse;
-            if (msg.result?.tools) {
-              clearTimeout(timeout);
-              cleanup();
-
-              const tools = msg.result.tools;
-              this.updateToolFilter(filterId, tools);
-
-              resolve({
-                success: true,
-                toolCount: tools.length,
-              });
-              return;
-            }
-          } catch (error) {
-            log.debug("Failed to parse MCP response:", error);
-          }
-        }
-      });
-
-      proc.on("error", (err) => {
-        clearTimeout(timeout);
-        cleanup();
-        this.updateToolFilter(filterId, [], err.message);
-        resolve({ success: false, error: err.message, toolCount: 0 });
-      });
-
-      proc.on("close", (code) => {
-        clearTimeout(timeout);
-        if (!resolved) {
-          resolved = true;
-          const error = `Exited with code ${code}`;
-          this.updateToolFilter(filterId, [], error);
-          resolve({ success: false, error, toolCount: 0 });
-        }
-      });
-
-      // Send MCP requests
-      setTimeout(() => {
-        try {
-          proc.stdin?.write(JSON.stringify(this.createInitRequest()) + "\n");
-
-          setTimeout(() => {
-            proc.stdin?.write(JSON.stringify(this.createToolsListRequest()) + "\n");
-          }, 500);
-        } catch (error) {
-          log.debug("Failed to write to process stdin:", error);
-        }
-      }, 300);
     });
+    try {
+      const operation = async (): Promise<ServerTestResult> => {
+        const headers = remote ? await this.getAuthHeaders(server) : undefined;
+        if (controller.signal.aborted) throw new Error("Timeout");
+        connection = createMcpConnection(server, "test", {
+          headers,
+          fetch: async (input, init) => {
+            const requestController = new AbortController();
+            const abort = (): void => requestController.abort();
+            for (const signal of [controller.signal, init?.signal]) {
+              if (!signal) continue;
+              if (signal.aborted) abort();
+              else {
+                signal.addEventListener("abort", abort, { once: true });
+                abortCleanups.push(() => signal.removeEventListener("abort", abort));
+              }
+            }
+            const response = await fetch(input, {
+              ...init,
+              signal: requestController.signal,
+            });
+            if (response.status === 401) unauthorized = response;
+            return response;
+          },
+        });
+        await connection.client.connect(connection.transport);
+        const result = await connection.client.listTools(undefined, { signal: controller.signal });
+        if (controller.signal.aborted) throw new Error("Timeout");
+        this.updateToolFilter(filterId, result.tools);
+        return { success: true, toolCount: result.tools.length };
+      };
+      return await Promise.race([operation(), timeout]);
+    } catch (error) {
+      const message = controller.signal.aborted
+        ? "Timeout"
+        : error instanceof Error
+          ? error.message
+          : String(error);
+      if (remote && (unauthorized || message.includes("401") || message.includes("Unauthorized"))) {
+        const requirements = unauthorized?.headers.get("WWW-Authenticate");
+        const authRequirements = requirements
+          ? getAuthService().parseWWWAuthenticate(requirements)
+          : undefined;
+        const result: ExtendedServerTestResult = (!skipAuth && unauthorized
+          ? await this.handleUnauthorized(server, unauthorized)
+          : null) ?? {
+          success: false,
+          error: "HTTP 401 - Authentication required",
+          toolCount: 0,
+          requiresAuth: true,
+          authRequirements,
+        };
+        this.updateToolFilter(filterId, [], result.error);
+        return result;
+      }
+      this.updateToolFilter(filterId, [], message);
+      return { success: false, error: message, toolCount: 0 };
+    } finally {
+      clearTimeout(deadline);
+      controller.abort();
+      if (connection)
+        await closeMcpConnection(connection).catch((error) =>
+          log.debug("Connection cleanup failed:", error)
+        );
+      for (const cleanup of abortCleanups) cleanup();
+    }
   }
 
   /** Set callback for handling OAuth authentication */
@@ -329,10 +253,10 @@ export class TestingService {
         // Auto-enable OAuth on the server configuration
         const configService = getConfigService();
         configService.updateRemoteServer(server.id, {
-          oauth: { enabled: true },
+          oauth: { ...server.oauth, enabled: true },
         });
         // Update the server object in memory
-        server.oauth = { enabled: true };
+        server.oauth = { ...server.oauth, enabled: true };
         log.debug(`Auto-enabled OAuth for server: ${server.id}`);
       } else {
         // Return that auth is required but not configured
@@ -379,63 +303,53 @@ export class TestingService {
   /** Test and automatically authenticate a remote server */
   async testAndAuthenticate(
     server: RemoteServer,
-    onAuthUrl: (url: string) => Promise<void>
+    onAuthUrl: (url: string) => Promise<void>,
+    options: {
+      onPhase?: (phase: "testing" | "authorization-required" | "waiting" | "retesting") => void;
+      signal?: globalThis.AbortSignal;
+    } = {}
   ): Promise<ExtendedServerTestResult> {
-    const authService = getAuthService();
-
-    // First, test without auth to see if it's needed
-    let result = await this.testRemoteServer(server, true);
-
-    // If successful, no auth needed
-    if (result.success) {
-      return result;
-    }
-
-    // If auth required, auto-enable OAuth and authenticate
-    if (result.requiresAuth) {
-      // Auto-enable OAuth if not already enabled
+    const auth = getAuthService();
+    let state: string | undefined;
+    const cancel = (): void => {
+      if (state) auth.releaseOAuthFlow(state);
+    };
+    try {
+      options.onPhase?.("testing");
+      const result = await this.testRemoteServer(server, true);
+      if (options.signal?.aborted) throw new Error("Authorization cancelled");
+      if (result.success || !result.requiresAuth) return result;
+      options.onPhase?.("authorization-required");
       if (!server.oauth?.enabled) {
-        const configService = getConfigService();
-        configService.updateRemoteServer(server.id, {
-          oauth: { enabled: true },
-        });
-        server.oauth = { enabled: true };
+        const oauth = { ...server.oauth, enabled: true };
+        const updated = getConfigService().updateRemoteServer(server.id, { oauth });
+        if (!updated.success) throw new Error(updated.error || "Cannot enable OAuth");
+        server = { ...server, oauth };
       }
-
-      // Start OAuth flow
-      const flow = await authService.startOAuthFlow(server, result.authRequirements);
-      if (flow) {
-        // Notify caller with auth URL
-        await onAuthUrl(flow.authUrl);
-
-        // Wait for auth to complete
-        const authResult = await authService.waitForAuth(flow.state);
-
-        // Stop callback server
-        authService.stopCallbackServer();
-
-        if (authResult.success) {
-          // Re-test with the new token
-          result = await this.testRemoteServer(server);
-        } else {
-          return {
-            success: false,
-            error: `Authentication failed: ${authResult.error}`,
-            toolCount: 0,
-            requiresAuth: true,
-          };
-        }
-      } else {
-        return {
-          success: false,
-          error: "Failed to start OAuth flow - server may not support OAuth discovery",
-          toolCount: 0,
-          requiresAuth: true,
-        };
-      }
+      const flow = await auth.startOAuthFlow(server, result.authRequirements);
+      if (!flow)
+        throw new Error("Failed to start OAuth flow - server may not support OAuth discovery");
+      state = flow.state;
+      options.signal?.addEventListener("abort", cancel, { once: true });
+      if (options.signal?.aborted) throw new Error("Authorization cancelled");
+      await onAuthUrl(flow.authUrl);
+      options.onPhase?.("waiting");
+      const authResult = await auth.waitForAuth(flow.state);
+      if (!authResult.success) throw new Error("Authentication failed: " + authResult.error);
+      if (options.signal?.aborted) throw new Error("Authorization cancelled");
+      options.onPhase?.("retesting");
+      return await this.testRemoteServer(server);
+    } catch (error) {
+      return {
+        success: false,
+        toolCount: 0,
+        requiresAuth: true,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      options.signal?.removeEventListener("abort", cancel);
+      if (state) auth.releaseOAuthFlow(state);
     }
-
-    return result;
   }
 
   /** Test a remote HTTP/SSE server */
@@ -443,258 +357,7 @@ export class TestingService {
     server: RemoteServer,
     skipAuth: boolean = false
   ): Promise<ExtendedServerTestResult> {
-    const filterId = `remote:${server.id}`;
-
-    // For SSE servers, use the MCP SDK transport directly
-    if (server.type === "sse") {
-      return this.testRemoteServerWithSDK(server, skipAuth);
-    }
-
-    // For HTTP servers, use direct fetch (faster for simple cases)
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), this.testTimeout);
-
-      const headers = await this.getAuthHeaders(server);
-      const messageUrl = server.url;
-
-      // Initialize
-      const initResponse = await fetch(messageUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(this.createInitRequest()),
-        signal: controller.signal,
-      });
-
-      // Handle 401 Unauthorized
-      if (initResponse.status === 401) {
-        clearTimeout(timeout);
-
-        // If skipAuth is true, just return that auth is required without trying OAuth flow
-        if (skipAuth) {
-          const error = "HTTP 401 - Authentication required";
-          this.updateToolFilter(filterId, [], error);
-          return { success: false, error, toolCount: 0, requiresAuth: true };
-        }
-
-        const authResult = await this.handleUnauthorized(server, initResponse);
-        if (authResult) {
-          this.updateToolFilter(filterId, [], authResult.error);
-          return authResult;
-        }
-
-        const error = "HTTP 401 - Authentication required";
-        this.updateToolFilter(filterId, [], error);
-        return { success: false, error, toolCount: 0, requiresAuth: true };
-      }
-
-      if (!initResponse.ok) {
-        clearTimeout(timeout);
-        const error = `HTTP ${initResponse.status}`;
-        this.updateToolFilter(filterId, [], error);
-        return { success: false, error, toolCount: 0 };
-      }
-
-      // Capture session ID if provided (for servers like deepwiki)
-      const sessionId = initResponse.headers.get("mcp-session-id");
-      const toolsHeaders = { ...headers };
-      if (sessionId) {
-        toolsHeaders["mcp-session-id"] = sessionId;
-      }
-
-      // Get tools
-      const toolsResponse = await fetch(messageUrl, {
-        method: "POST",
-        headers: toolsHeaders,
-        body: JSON.stringify(this.createToolsListRequest()),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-
-      // Handle 401 on tools request
-      if (toolsResponse.status === 401) {
-        // If skipAuth is true, just return that auth is required without trying OAuth flow
-        if (skipAuth) {
-          const error = "HTTP 401 - Authentication required";
-          this.updateToolFilter(filterId, [], error);
-          return { success: false, error, toolCount: 0, requiresAuth: true };
-        }
-
-        const authResult = await this.handleUnauthorized(server, toolsResponse);
-        if (authResult) {
-          this.updateToolFilter(filterId, [], authResult.error);
-          return authResult;
-        }
-
-        const error = "HTTP 401 - Authentication required";
-        this.updateToolFilter(filterId, [], error);
-        return { success: false, error, toolCount: 0, requiresAuth: true };
-      }
-
-      if (!toolsResponse.ok) {
-        const error = `HTTP ${toolsResponse.status}`;
-        this.updateToolFilter(filterId, [], error);
-        return { success: false, error, toolCount: 0 };
-      }
-
-      // Parse response - handle both JSON and SSE
-      let result: McpToolsResponse;
-      const contentType = toolsResponse.headers.get("content-type") || "";
-
-      if (contentType.includes("text/event-stream")) {
-        // Read only the first SSE data event so we don't wait for long-lived streams
-        const reader = toolsResponse.body?.getReader();
-        if (!reader) {
-          const error = "No response body for SSE";
-          this.updateToolFilter(filterId, [], error);
-          return { success: false, error, toolCount: 0 };
-        }
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let parsed: McpToolsResponse | null = null;
-
-        try {
-          while (!parsed) {
-            const { value, done } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed.startsWith("data:")) continue;
-
-              const data = trimmed.slice(5).trim();
-              if (!data || data === "[DONE]") continue;
-
-              if (data.startsWith("{")) {
-                try {
-                  parsed = JSON.parse(data) as McpToolsResponse;
-                  break;
-                } catch (error) {
-                  // Keep reading if first chunk is not parseable JSON
-                  log.debug("Failed to parse SSE chunk, continuing:", error);
-                }
-              }
-            }
-          }
-        } finally {
-          // Stop reading the stream after first event to avoid waiting for a long-lived connection
-          try {
-            await reader.cancel();
-          } catch {
-            // Ignore cancellation errors
-          }
-        }
-
-        if (!parsed) {
-          const error = "No JSON data in SSE response";
-          this.updateToolFilter(filterId, [], error);
-          return { success: false, error, toolCount: 0 };
-        }
-
-        result = parsed;
-      } else {
-        // Parse JSON response
-        result = (await toolsResponse.json()) as McpToolsResponse;
-      }
-
-      if (result.result?.tools) {
-        const tools = result.result.tools;
-        this.updateToolFilter(filterId, tools);
-        return { success: true, toolCount: tools.length };
-      }
-
-      const error = "No tools in response";
-      this.updateToolFilter(filterId, [], error);
-      return { success: false, error, toolCount: 0 };
-    } catch (err) {
-      const error =
-        err instanceof Error
-          ? err.name === "AbortError"
-            ? "Timeout"
-            : err.message
-          : "Unknown error";
-      this.updateToolFilter(filterId, [], error);
-      return { success: false, error, toolCount: 0 };
-    }
-  }
-
-  /** Test a remote SSE server using the MCP SDK */
-  private async testRemoteServerWithSDK(
-    server: RemoteServer,
-    skipAuth: boolean = false
-  ): Promise<ExtendedServerTestResult> {
-    const filterId = `remote:${server.id}`;
-
-    try {
-      const url = new URL(server.url);
-      const headers: Record<string, string> = {};
-
-      // Get auth headers
-      const authHeaders = await this.getAuthHeaders(server);
-      Object.assign(headers, authHeaders);
-
-      // Create SSE transport
-      const transport = new SSEClientTransport(url, {
-        requestInit: { headers },
-      });
-
-      // Create client with timeout
-      const client = new Client({ name: "mcp-tester", version: "1.0.0" }, { capabilities: {} });
-
-      // Set up timeout
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("Timeout")), this.testTimeout);
-      });
-
-      // Connect with timeout
-      await Promise.race([client.connect(transport), timeoutPromise]);
-
-      // Get tools
-      const toolsResult = await Promise.race([client.listTools(), timeoutPromise]);
-
-      const tools = toolsResult.tools || [];
-
-      // Close connection
-      try {
-        await client.close();
-      } catch {
-        // Ignore close errors
-      }
-
-      // Update tool filter
-      this.updateToolFilter(filterId, tools);
-
-      return {
-        success: true,
-        toolCount: tools.length,
-      };
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-
-      // Check for 401 errors
-      if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
-        if (skipAuth) {
-          const error = "HTTP 401 - Authentication required";
-          this.updateToolFilter(filterId, [], error);
-          return { success: false, error, toolCount: 0, requiresAuth: true };
-        }
-
-        // Try to handle unauthorized
-        const error = "HTTP 401 - Authentication required";
-        this.updateToolFilter(filterId, [], error);
-        return { success: false, error, toolCount: 0, requiresAuth: true };
-      }
-
-      const error = errorMessage === "Timeout" ? "Timeout" : errorMessage;
-      this.updateToolFilter(filterId, [], error);
-      return { success: false, error, toolCount: 0 };
-    }
+    return this.testConnection(server, skipAuth);
   }
 
   /** Test a remote server with OAuth retry */

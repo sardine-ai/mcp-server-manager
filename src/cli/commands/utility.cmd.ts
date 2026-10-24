@@ -1,36 +1,16 @@
+import { runDoctorChecks } from "../../services/doctor.service.js";
 /**
  * Utility commands - doctor, config, tokens
  */
 
 import { Command } from "commander";
-import { execSync, spawnSync } from "child_process";
-import fs from "fs";
+import { spawnSync } from "child_process";
 import { colors, c } from "../../shared/colors.js";
 import { formatTokens, outputJson } from "../../shared/formatters.js";
 import { getConfigService } from "../../services/config.service.js";
 import { changeGatewayPort } from "../../services/gateway-port.service.js";
 import { getSettingsService } from "../../services/settings.service.js";
 import { VERSION } from "../../shared/version.js";
-
-/** Check if a command exists */
-function commandExists(cmd: string): boolean {
-  try {
-    execSync(`which ${cmd}`, { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Get command version */
-function getVersion(cmd: string): string | null {
-  try {
-    const result = execSync(`${cmd} --version`, { encoding: "utf8" });
-    return result.trim().split("\n")[0];
-  } catch {
-    return null;
-  }
-}
 
 /** Register utility commands */
 export function registerUtilityCommands(program: Command): void {
@@ -43,79 +23,7 @@ export function registerUtilityCommands(program: Command): void {
         `\n${colors.bright}${colors.cyan}MCP Server Manager - Health Check${colors.reset}\n`
       );
 
-      const checks: Array<{ name: string; status: boolean; info: string }> = [];
-
-      // Node.js
-      const nodeVersion = process.version;
-      const nodeOk = parseInt(nodeVersion.slice(1)) >= 18;
-      checks.push({
-        name: "Node.js",
-        status: nodeOk,
-        info: nodeOk ? nodeVersion : `${nodeVersion} (requires >= 18.0.0)`,
-      });
-
-      // Python
-      const pythonExists = commandExists("python3") || commandExists("python");
-      const pythonVersion = pythonExists ? getVersion("python3") || getVersion("python") : null;
-      checks.push({
-        name: "Python",
-        status: pythonExists,
-        info: pythonVersion || "not found",
-      });
-
-      // uv
-      const uvExists = commandExists("uv");
-      const uvVersion = uvExists ? getVersion("uv") : null;
-      checks.push({
-        name: "uv",
-        status: uvExists,
-        info: uvVersion || "not found (optional)",
-      });
-
-      // uvx
-      const uvxExists = commandExists("uvx");
-      checks.push({
-        name: "uvx",
-        status: uvxExists,
-        info: uvxExists ? "available" : "not found (optional)",
-      });
-
-      // npm
-      const npmExists = commandExists("npm");
-      const npmVersion = npmExists ? getVersion("npm") : null;
-      checks.push({
-        name: "npm",
-        status: npmExists,
-        info: npmVersion || "not found",
-      });
-
-      // Config directory
-      const configService = getConfigService();
-      const paths = configService.getPaths();
-      const configExists = fs.existsSync(paths.configDir);
-      checks.push({
-        name: "Config directory",
-        status: configExists,
-        info: configExists ? paths.configDir : "not created",
-      });
-
-      // Config file
-      const configFileExists = fs.existsSync(paths.configPath);
-      checks.push({
-        name: "Config file",
-        status: configFileExists,
-        info: configFileExists ? "exists" : "not found",
-      });
-
-      // Servers count
-      const localServers = configService.getLocalServers();
-      const remoteServers = configService.getRemoteServers();
-      const totalServers = localServers.length + remoteServers.length;
-      checks.push({
-        name: "Servers configured",
-        status: true,
-        info: `${totalServers} (${localServers.length} local, ${remoteServers.length} remote)`,
-      });
+      const checks = runDoctorChecks();
 
       // Print results
       for (const check of checks) {
@@ -308,8 +216,9 @@ export function registerUtilityCommands(program: Command): void {
 
       const result = await changeGatewayPort(port);
       if (!result.success) {
-        console.log(`${c.cross} ${result.error}`);
-        process.exit(1);
+        console.error("Port is " + result.port + ": " + result.error);
+        process.exitCode = 1;
+        return;
       }
 
       console.log(`${c.checkmark} Port set to ${port}`);

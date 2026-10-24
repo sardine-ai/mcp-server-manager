@@ -13,7 +13,7 @@ export { ProfileService, getProfileService, resetProfileService } from "./profil
 
 // Client service
 export { ClientService, getClientService, resetClientService } from "./client.service.js";
-export { changeGatewayPort } from "./gateway-port.service.js";
+export { changeGatewayPort, type PortUpdateResult } from "./gateway-port.service.js";
 
 // Testing service
 export { TestingService, getTestingService, resetTestingService } from "./testing.service.js";
@@ -77,3 +77,7 @@ export type {
   AuthServerMetadata,
   ServerAuthRequirements,
 } from "../types/index.js";
+
+export { runDoctorChecks } from "./doctor.service.js";
+
+export { refreshDaemonIfRunning } from "./daemon-refresh.js";

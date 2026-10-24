@@ -119,6 +119,69 @@ describe("AuthService unit coverage", () => {
     expect(state).toHaveLength(32);
   });
 
+  it("releases only its own pending authorization before stopping a shared callback", async () => {
+    const first = await service.buildAuthorizationUrl(
+      remoteServer(),
+      AUTH_METADATA,
+      "http://127.0.0.1:8400/callback",
+      "client"
+    );
+    const second = await service.buildAuthorizationUrl(
+      remoteServer({ id: "other" }),
+      AUTH_METADATA,
+      "http://127.0.0.1:8400/callback",
+      "client"
+    );
+    const stop = vi.spyOn(service, "stopCallbackServer");
+    service.releaseOAuthFlow(first.state);
+    expect(service.getPendingAuthState("other")).toBe(second.state);
+    expect(stop).not.toHaveBeenCalled();
+    service.releaseOAuthFlow(second.state);
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("preserves malformed credential and pending-auth files", () => {
+    const paths = service.getStoragePaths();
+    service.saveTokensForServer("remote", token());
+    fs.writeFileSync(paths.tokensPath, "{broken credentials");
+    expect(() => service.getToken("remote")).toThrow(paths.tokensPath);
+    expect(() => service.saveTokensForServer("other", token())).toThrow(paths.tokensPath);
+    expect(fs.readFileSync(paths.tokensPath, "utf8")).toBe("{broken credentials");
+    fs.writeFileSync(paths.pendingAuthPath, "{broken pending");
+    expect(() => new AuthService(configDir)).toThrow();
+    expect(fs.readFileSync(paths.pendingAuthPath, "utf8")).toBe("{broken pending");
+  });
+
+  it("keeps the callback open while another login is registering", async () => {
+    const existing = await service.buildAuthorizationUrl(
+      remoteServer(),
+      AUTH_METADATA,
+      "http://127.0.0.1:8400/callback",
+      "client"
+    );
+    vi.spyOn(service, "discoverAuthServer").mockResolvedValue({
+      metadata: { ...AUTH_METADATA, registration_endpoint: "https://auth.test/register" },
+    });
+    vi.spyOn(service, "startCallbackServer").mockResolvedValue("http://127.0.0.1:8400/callback");
+    let registered: (() => void) | undefined;
+    vi.spyOn(service, "registerClient").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          registered = (): void => resolve({ client_id: "registered" });
+        })
+    );
+    const stop = vi.spyOn(service, "stopCallbackServer");
+    const next = service.startOAuthFlow(remoteServer({ id: "other" }));
+    await vi.waitFor(() => expect(registered).toBeDefined());
+    service.releaseOAuthFlow(existing.state);
+    expect(stop).not.toHaveBeenCalled();
+    registered?.();
+    const flow = await next;
+    expect(flow).not.toBeNull();
+    if (flow) service.releaseOAuthFlow(flow.state);
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
   it("returns minimal requirements for non-bearer WWW-Authenticate headers", () => {
     expect(service.parseWWWAuthenticate('Basic realm="legacy"')).toEqual({
       requiresAuth: true,

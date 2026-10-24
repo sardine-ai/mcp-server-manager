@@ -2,7 +2,6 @@
  * Profile service - manages server profiles
  */
 
-import fs from "fs";
 import type {
   Profile,
   ProfilesConfig,
@@ -11,10 +10,7 @@ import type {
   ProfileServers,
 } from "../types/index.js";
 import { getConfigService } from "./config.service.js";
-import { createLogger } from "../shared/logger.js";
-import { protectExistingPrivateFile, writePrivateJsonFile } from "../shared/secure-storage.js";
-
-const log = createLogger("ProfileService");
+import { readPrivateJsonFile, writePrivateJsonFile } from "../shared/secure-storage.js";
 
 /** Default profiles configuration */
 const DEFAULT_PROFILES: ProfilesConfig = {
@@ -41,17 +37,8 @@ export class ProfileService {
 
   /** Load profiles from file */
   private load(): ProfilesConfig {
-    try {
-      if (fs.existsSync(this.profilesPath)) {
-        protectExistingPrivateFile(this.profilesPath);
-        const data = fs.readFileSync(this.profilesPath, "utf8");
-        const parsed = JSON.parse(data) as Partial<ProfilesConfig>;
-        return { ...DEFAULT_PROFILES, ...parsed };
-      }
-    } catch (error) {
-      log.debug("Failed to load profiles, using defaults:", error);
-    }
-    return { ...DEFAULT_PROFILES };
+    const parsed = readPrivateJsonFile<Partial<ProfilesConfig>>(this.profilesPath);
+    return { ...globalThis.structuredClone(DEFAULT_PROFILES), ...parsed };
   }
 
   /** Save profiles to file */

@@ -6,6 +6,7 @@ export default defineConfig({
     "The all-in-one CLI tool to manage your MCP servers across all clients",
   base: "/mcp-server-manager/",
   ignoreDeadLinks: true,
+  srcExclude: ["plans/**"],
 
   head: [
     ["link", { rel: "icon", type: "image/svg+xml", href: "/logo.svg" }],

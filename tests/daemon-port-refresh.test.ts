@@ -33,17 +33,19 @@ describe("Daemon refresh after changing port", () => {
   });
 
   it("discovers the old listener and checks health on the new port", async () => {
-    expect(await service.refreshDaemon(8850)).toEqual({ success: true });
-    expect(service.isDaemonRunning).toHaveBeenCalledWith(8850);
+    expect(await service.refreshDaemon(service.getPortUpdateStatus(), true)).toEqual({
+      success: true,
+    });
+    expect(service.isDaemonRunning).toHaveBeenCalled();
     expect(process.kill).toHaveBeenCalledWith(12345, "SIGHUP");
     expect(fetchHealth).toHaveBeenCalledWith("http://localhost:9000/health", expect.anything());
   });
 
   it("reports failure when the new port does not become healthy", async () => {
     fetchHealth.mockRejectedValueOnce(new Error("new port unavailable"));
-    expect(await service.refreshDaemon(8850)).toEqual({
+    expect(await service.refreshDaemon(service.getPortUpdateStatus(), true)).toEqual({
       success: false,
-      error: "new port unavailable",
+      error: "Refresh signaled, but daemon readiness was not confirmed",
     });
   });
 
@@ -54,7 +56,7 @@ describe("Daemon refresh after changing port", () => {
 
   it("does not signal or check health when the old listener is gone", async () => {
     vi.mocked(service.isDaemonRunning).mockReturnValue({ running: false });
-    expect(await service.refreshDaemon(8850)).toEqual({
+    expect(await service.refreshDaemon(service.getPortUpdateStatus(), true)).toEqual({
       success: false,
       error: "Daemon is not running",
     });

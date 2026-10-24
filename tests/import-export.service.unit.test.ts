@@ -24,8 +24,46 @@ vi.mock("../src/services/client.service.js", () => ({
 
 describe("ImportExportService", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mockConfigService.addLocalServer.mockReturnValue({ success: true });
+    mockConfigService.addRemoteServer.mockReturnValue({ success: true });
+    mockConfigService.updateLocalServer.mockReturnValue({ success: true });
+    mockConfigService.updateRemoteServer.mockReturnValue({ success: true });
   });
+
+  it.each([false, true])(
+    "reports rejected and thrown writes through both entry points (%s)",
+    (decisions) => {
+      mockConfigService.addLocalServer.mockReturnValueOnce({ success: false });
+      mockConfigService.addRemoteServer.mockImplementationOnce(() => {
+        throw new Error("write failed");
+      });
+      const service = new ImportExportService();
+      const servers = [
+        { id: "rejected", name: "Rejected", serverType: "local" as const, command: "node" },
+        {
+          id: "throws",
+          name: "Throws",
+          serverType: "remote" as const,
+          url: "http://localhost/mcp",
+        },
+        { id: "saved", name: "Saved", serverType: "local" as const, command: "node" },
+      ];
+      const result = decisions
+        ? service.mergeServersWithDecisions(servers)
+        : service.mergeServers(servers);
+      expect(result).toMatchObject({
+        added: 1,
+        updated: 0,
+        skipped: 0,
+        merged: 0,
+        errors: [
+          { serverId: "rejected", error: "Import failed" },
+          { serverId: "throws", error: "write failed" },
+        ],
+      });
+    }
+  );
 
   it("parses mcpsm formatted payloads with local and remote servers", () => {
     const service = new ImportExportService();

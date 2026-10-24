@@ -1,3 +1,5 @@
+import fs from "fs";
+import { updateGatewayAddresses } from "./gateway-port.js";
 /**
  * Codex CLI Strategy - Strategy for OpenAI's Codex CLI
  * Uses TOML config format and URL-only gateway (no supergateway)
@@ -47,6 +49,27 @@ export class CodexStrategy extends TomlClientStrategy {
     return {
       url: `http://localhost:${port}${mcpPath}`,
     };
+  }
+
+  updateGatewayPort(port: number) {
+    const configPath = this.getEffectiveConfigPath(this.getPlatform());
+    if (!configPath || !fs.existsSync(configPath)) return { success: true };
+    try {
+      const config = TOML.parse(fs.readFileSync(configPath, "utf8"));
+      const servers = config.mcp_servers;
+      if (
+        !servers ||
+        typeof servers !== "object" ||
+        Array.isArray(servers) ||
+        servers instanceof Date
+      )
+        return { success: true };
+      if (updateGatewayAddresses(servers, port))
+        fs.writeFileSync(configPath, TOML.stringify(config));
+      return { success: true };
+    } catch {
+      return { success: false, error: "Cannot update client configuration at " + configPath };
+    }
   }
 
   protected tomlToStandardConfig(tomlConfig: TOML.JsonMap): ClientMcpConfig {

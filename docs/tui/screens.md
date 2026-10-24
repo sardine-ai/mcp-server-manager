@@ -107,7 +107,7 @@ Profiles:
 
 **Shortcut:** `I`
 
-Import and export server configurations.
+Import and export server configurations. Import results count successful operations and list failures by server ID. A partial import is shown as unsuccessful while keeping successful changes.
 
 ```
 Import / Export:
@@ -193,7 +193,9 @@ When you change the port setting:
 
 - ✓ All connected clients are **updated when their config is accessible**
 - ✓ The new port is written to each client's configuration
-- ✓ No need to manually edit client configs
+- ✓ Existing bare and profile gateways are updated; disconnected profiles remain disconnected
+- ✓ A running daemon is refreshed and its new listener is checked
+- Failures report the saved port and affected targets; successful changes remain saved
 - ✓ Real-time loading clients (Cursor, Windsurf, VS Code, Zed) see changes without restart
 
 ---

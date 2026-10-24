@@ -113,7 +113,7 @@ All business logic is encapsulated in singleton services:
 
 - `config.json` - Server configurations (local STDIO + remote HTTP/SSE)
 - `tool-filters.json` - Per-server tool enable/disable settings
-- `settings.json` - App settings (includes port configuration)
+- `settings.json` - App settings (editor); gateway port is canonical in `config.json`
 - `profiles.json` - Profile definitions
 - `clients.json` - Registered project/client locations for port updates
 
@@ -338,6 +338,9 @@ When conflicts are detected between imported and existing servers:
 
 ### Important Notes on Port Changes
 
-- Port edits and settings reset share `changeGatewayPort`; existing global and registered project gateways are updated. Failed paths produce warnings and remain registered for retry.
+- When port is changed in Settings (G), all connected clients are **automatically updated**
+- CLI port/settings commands and TUI settings share `changeGatewayPort`; low-level setters only persist storage
+- Existing global and registered project gateway addresses are updated in place; disconnected profiles remain disconnected
 - Clients screen: `S` switches global/current folder; Space toggles the selected profile. Status and config actions use that scope.
+- A running daemon is signaled using its captured PID; failures report the saved port and affected targets
 - No client restart required for real-time loading clients (Cursor, Windsurf, VS Code)

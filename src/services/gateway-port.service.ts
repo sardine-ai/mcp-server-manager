@@ -1,41 +1,32 @@
 import { getConfigService } from "./config.service.js";
-import { getSettingsService } from "./settings.service.js";
-import { getDaemonService } from "./daemon.service.js";
+import { getDaemonService, type DaemonStatus } from "./daemon.service.js";
+import { validatePort } from "../shared/validators.js";
 import { getClientStrategy, getRegisteredClientIds } from "./clients/index.js";
 import { ProjectConnectionsService } from "./project-connections.service.js";
-import { validatePort } from "../shared/validators.js";
-import type { ClientId, OperationResult, Platform } from "../types/index.js";
+import type { ClientId, Platform } from "../types/index.js";
 
-export async function changeGatewayPort(port: number) {
+export interface PortUpdateResult {
+  success: boolean;
+  port: number;
+  error?: string;
+  warnings: string[];
+}
+
+let portUpdateQueue: Promise<unknown> = Promise.resolve();
+
+async function refreshDaemonForPortChange(status: DaemonStatus, portChanged: boolean) {
+  if (!status.running) return { success: true };
+
+  const daemon = getDaemonService();
+  if (!portChanged) {
+    const health = await daemon.checkHealth();
+    if (health.status === "ok") return { success: true };
+  }
+  return daemon.refreshDaemon(status, true);
+}
+
+function updateClientGatewayPorts(port: number) {
   const warnings: string[] = [];
-  const validation = validatePort(port);
-  if (!validation.valid)
-    return { success: false, error: validation.error, warnings } satisfies OperationResult;
-
-  const configService = getConfigService();
-  const previousPort = configService.getPort();
-  const daemonService = getDaemonService();
-  const running = daemonService.isDaemonRunning(previousPort).running;
-  try {
-    const result = configService.setPort(port);
-    if (!result.success) return { ...result, warnings };
-  } catch (error) {
-    configService.getConfig().port = previousPort;
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-      warnings,
-    };
-  }
-  try {
-    const result = getSettingsService().set("port", port);
-    if (!result.success) warnings.push(result.error || "Could not save the port in settings");
-  } catch (error) {
-    warnings.push(
-      `Port saved, but settings could not be updated: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-
   const targets: { clientId: ClientId; projectDir?: string }[] = getRegisteredClientIds().map(
     (clientId) => ({ clientId })
   );
@@ -51,7 +42,7 @@ export async function changeGatewayPort(port: number) {
     const configPath = strategy?.getEffectiveConfigPath(process.platform as Platform);
     if (!strategy || !configPath) continue;
     try {
-      let config = strategy.readConfigForUpdate();
+      const config = strategy.readConfigForUpdate();
       if (!config) {
         if (projectDir)
           warnings.push(
@@ -59,30 +50,61 @@ export async function changeGatewayPort(port: number) {
           );
         continue;
       }
-      const keys = strategy.getGatewayKeys(config);
-      if (keys.length === 0) continue;
-      for (const key of keys) {
-        config = strategy.addGateway(config, port, key === "mcpsm" ? undefined : key.slice(6));
-      }
-      if (!strategy.writeConfig(config)) throw new Error("Failed to write config");
+      const result = strategy.updateGatewayPort(port);
+      if (!result.success) throw new Error(result.error || "Failed to write config");
     } catch (error) {
       warnings.push(
         `${configPath}: ${error instanceof Error ? error.message : String(error)}. Reconnect ${clientId}${projectDir ? ` in ${projectDir}` : " globally"} to update its gateway port.`
       );
     }
   }
-  if (running) {
-    try {
-      const result = await daemonService.refreshDaemon(previousPort);
-      if (!result.success)
-        warnings.push(
-          `Port saved, but the daemon could not refresh: ${result.error}. Restart the daemon.`
-        );
-    } catch (error) {
-      warnings.push(
-        `Port saved, but the daemon could not refresh: ${error instanceof Error ? error.message : String(error)}. Restart the daemon.`
-      );
-    }
+  return warnings;
+}
+
+async function applyGatewayPort(port: number) {
+  const config = getConfigService();
+  const previousPort = config.getPort();
+  const result: PortUpdateResult = { success: false, port: previousPort, warnings: [] };
+  const validation = validatePort(port);
+  if (!validation.valid) {
+    result.error = validation.error;
+    return result;
   }
-  return { success: true, warnings } satisfies OperationResult;
+
+  const status = getDaemonService().getPortUpdateStatus();
+  try {
+    const saved = config.setPort(port);
+    if (!saved.success) {
+      result.error = saved.error;
+      return result;
+    }
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+    return result;
+  }
+
+  result.port = port;
+  result.warnings = updateClientGatewayPorts(port);
+
+  try {
+    const refresh = await refreshDaemonForPortChange(status, previousPort !== port);
+    if (!refresh.success)
+      result.warnings.push(
+        (refresh.error || "Daemon readiness was not confirmed") + ". Restart the daemon."
+      );
+  } catch (error) {
+    result.warnings.push(
+      (error instanceof Error ? error.message : String(error)) + ". Restart the daemon."
+    );
+  }
+
+  result.success = result.warnings.length === 0;
+  result.error = result.warnings.join("; ") || undefined;
+  return result;
+}
+
+export function changeGatewayPort(port: number) {
+  const update = portUpdateQueue.then(() => applyGatewayPort(port));
+  portUpdateQueue = update.catch(() => undefined);
+  return update;
 }

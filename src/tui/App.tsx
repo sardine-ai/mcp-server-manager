@@ -1,3 +1,5 @@
+import { deriveServerViews } from "./utils/serverViews.js";
+import { refreshDaemonIfRunning as refreshRunningDaemon } from "../services/daemon-refresh.js";
 /**
  * Main TUI Application - Ink-based terminal UI
  */
@@ -9,12 +11,11 @@ import { Header, ShortcutsBar, ConfirmDialog, ScrollableList, ScreenLayout, Vers
 import { getConfigService } from "../services/config.service.js";
 import { getTestingService } from "../services/testing.service.js";
 import { getProfileService } from "../services/profile.service.js";
-import { getDaemonService } from "../services/daemon.service.js";
 import { getAuthService } from "../services/auth.service.js";
 import { getVersionService } from "../services/version.service.js";
 import { createLogger } from "../shared/logger.js";
 import { formatTokens } from "../shared/formatters.js";
-import type { LocalServer, RemoteServer, ServerToolFilter, Settings } from "../types/index.js";
+import type { LocalServer, RemoteServer, Settings } from "../types/index.js";
 import { VERSION } from "../shared/version.js";
 import { getEnabledTokenTotal } from "./utils/tokenTotals.js";
 
@@ -85,22 +86,11 @@ interface AppProps {
   onExit?: () => void;
 }
 
-function filterIndicatesAuth(filter?: ServerToolFilter): boolean {
-  if (!filter?.error) return false;
-  const message = filter.error.toLowerCase();
-  return (
-    message.includes("auth") ||
-    message.includes("unauthorized") ||
-    message.includes("401")
-  );
-}
-
 export function App({ onExit }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const { theme } = useTheme();
   const configService = getConfigService();
   const profileService = getProfileService();
-  const daemonService = getDaemonService();
   const terminalSize = useTerminalSize();
   const isCompactLayout = terminalSize.columns < 90;
   const contentMargin = isCompactLayout ? 0 : 1;
@@ -127,13 +117,23 @@ export function App({ onExit }: AppProps): React.ReactElement {
     };
   });
 
+  const serverGeneration = React.useRef(0);
+  const mounted = React.useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+
+
   // Refresh servers from config
   const refreshServers = useCallback(() => {
+    serverGeneration.current++;
     const newLocalServers = configService.getLocalServers().map((server) => ({ ...server }));
     const newRemoteServers = configService.getRemoteServers().map((server) => ({ ...server }));
 
+    const validTokens = new Set(newRemoteServers
+      .filter((server) => getAuthService().hasValidToken(server.id)).map((server) => server.id));
+    const view = deriveServerViews(newLocalServers, newRemoteServers, configService.getToolFilters(), validTokens);
     setState((prev) => ({
       ...prev,
+      ...view,
       localServers: newLocalServers,
       remoteServers: newRemoteServers,
     }));
@@ -146,6 +146,7 @@ export function App({ onExit }: AppProps): React.ReactElement {
 
   const showMessage = useCallback(
     (msg: string, type: "success" | "error" | "info" = "info") => {
+      if (!mounted.current) return;
       setState((prev) => ({ ...prev, message: msg, messageType: type }));
       const timeoutId = setTimeout(() => {
         setState((prev) => ({ ...prev, message: null }));
@@ -166,120 +167,54 @@ export function App({ onExit }: AppProps): React.ReactElement {
 
   const refreshDaemonIfRunning = useCallback(
     (context: string) => {
-      if (daemonService.isDaemonRunning().running) {
-        daemonService.refreshDaemon().catch((error) => {
-          log.error(`Failed to refresh daemon after ${context}:`, error);
-        });
-      }
+      refreshRunningDaemon().then((result) => {
+        if (!result.success) showMessage("Change saved; daemon refresh failed: " + result.error, "error");
+      }).catch((error) => {
+        log.error("Failed to refresh daemon after " + context, error);
+        showMessage("Change saved; daemon refresh failed", "error");
+      });
     },
-    [daemonService]
+    [showMessage]
   );
 
   // Load tool counts and auth status on mount
   useEffect(() => {
     let isMounted = true;
 
+    const generation = serverGeneration.current;
+    const current = () => isMounted && generation === serverGeneration.current;
     const loadToolCountsAndAuthStatus = async (): Promise<void> => {
       const testingService = getTestingService();
       const authService = getAuthService();
-
-      // First try to load from cached tool filters
-      const toolFilters = configService.getToolFilters();
-      const newToolCounts = new Map<string, number>();
-
-      for (const server of state.localServers) {
-        const filter = toolFilters[server.id];
-        if (filter?.allTools) {
-          newToolCounts.set(server.id, filter.allTools.length);
-        }
-      }
-
-      for (const server of state.remoteServers) {
-        const filter = toolFilters[`remote:${server.id}`];
-        if (filter?.allTools) {
-          newToolCounts.set(`remote:${server.id}`, filter.allTools.length);
-        }
-      }
-
-      // Check which remote servers need authentication
-      const needsAuth = new Set<string>();
-      for (const server of state.remoteServers) {
-        const filter = toolFilters[`remote:${server.id}`];
-        if (server.oauth?.enabled) {
-          if (!authService.hasValidToken(server.id) || filterIndicatesAuth(filter)) {
-            needsAuth.add(server.id);
-          }
-          if (authService.isRefreshable(server.id)) {
-            authService.getValidToken(server).then((refreshed) => {
-              if (refreshed && isMounted) {
-                setState((prev) => {
-                  const newNeedsAuth = new Set(prev.serversNeedingAuth);
-                  newNeedsAuth.delete(server.id);
-                  return { ...prev, serversNeedingAuth: newNeedsAuth };
-                });
-              }
-            });
-          }
-        } else if (filterIndicatesAuth(filter)) {
-          needsAuth.add(server.id);
-        }
-      }
-
-      if (!isMounted) return;
-      setState((prev) => ({ ...prev, toolCounts: newToolCounts, serversNeedingAuth: needsAuth }));
-
-      // Auto-test unknown servers in background
+      const local = configService.getLocalServers();
+      const remote = configService.getRemoteServers();
+      const refreshed = new Set<string>();
+      const applySnapshot = () => {
+        if (!current()) return;
+        const valid = new Set(remote.filter((server) => authService.hasValidToken(server.id)).map((server) => server.id));
+        const view = deriveServerViews(local, remote, configService.getToolFilters(), valid, refreshed);
+        setState((prev) => ({ ...prev, ...view }));
+      };
+      const refreshTokens = async () => {
+        await Promise.all(remote.filter((server) => server.oauth?.enabled && authService.isRefreshable(server.id))
+          .map(async (server) => {
+            const token = await authService.getValidToken(server);
+            if (token && current()) refreshed.add(server.id);
+          }));
+        applySnapshot();
+      };
+      applySnapshot();
+      const refreshing = refreshTokens().catch((error) => {
+        if (current()) showMessage(String(error), "error");
+      });
       await testingService.autoTestUnknownServers();
-
-      if (!isMounted) return;
-
-      // Reload tool counts after testing
-      const updatedFilters = configService.getToolFilters();
-      const finalToolCounts = new Map<string, number>();
-
-      for (const server of state.localServers) {
-        const filter = updatedFilters[server.id];
-        if (filter?.allTools) {
-          finalToolCounts.set(server.id, filter.allTools.length);
-        }
-      }
-
-      for (const server of state.remoteServers) {
-        const filter = updatedFilters[`remote:${server.id}`];
-        if (filter?.allTools) {
-          finalToolCounts.set(`remote:${server.id}`, filter.allTools.length);
-        }
-      }
-
-      // Re-check auth status after testing
-      const finalNeedsAuth = new Set<string>();
-      for (const server of state.remoteServers) {
-        const filter = updatedFilters[`remote:${server.id}`];
-        if (server.oauth?.enabled) {
-          if (authService.isRefreshable(server.id)) {
-            authService.getValidToken(server).then((refreshed) => {
-              if (refreshed && isMounted) {
-                setState((prev) => {
-                  const newNeedsAuth = new Set(prev.serversNeedingAuth);
-                  newNeedsAuth.delete(server.id);
-                  return { ...prev, serversNeedingAuth: newNeedsAuth };
-                });
-              }
-            });
-          } else if (!authService.hasValidToken(server.id)) {
-            finalNeedsAuth.add(server.id);
-          }
-        } else if (filterIndicatesAuth(filter)) {
-          finalNeedsAuth.add(server.id);
-        }
-      }
-
-      if (!isMounted) return;
-      setState((prev) => ({ ...prev, toolCounts: finalToolCounts, serversNeedingAuth: finalNeedsAuth }));
+      if (!current()) return;
+      applySnapshot();
       refreshDaemonIfRunning("auto-testing servers");
+      await refreshing;
     };
 
-    loadToolCountsAndAuthStatus();
+    loadToolCountsAndAuthStatus().catch((error) => { if (current()) showMessage(String(error), "error"); });
 
     return () => {
       isMounted = false;
@@ -336,18 +271,11 @@ export function App({ onExit }: AppProps): React.ReactElement {
   // Refresh auth status for all remote servers
   const refreshAuthStatus = useCallback(() => {
     const authService = getAuthService();
-    const toolFilters = configService.getToolFilters();
-    const needsAuth = new Set<string>();
-    for (const server of state.remoteServers) {
-      if (
-        server.oauth?.enabled &&
-        (!authService.hasValidToken(server.id) ||
-          filterIndicatesAuth(toolFilters[`remote:${server.id}`]))
-      ) {
-        needsAuth.add(server.id);
-      }
-    }
-    setState((prev) => ({ ...prev, serversNeedingAuth: needsAuth }));
+    const local = configService.getLocalServers();
+    const remote = configService.getRemoteServers();
+    const valid = new Set(remote.filter((server) => authService.hasValidToken(server.id)).map((server) => server.id));
+    const view = deriveServerViews(local, remote, configService.getToolFilters(), valid);
+    setState((prev) => ({ ...prev, ...view }));
   }, [state.remoteServers]);
 
   // Navigate back to main screen

@@ -17,7 +17,6 @@ export default defineConfig({
   treeshake: true,
   minify: false,
   outDir: "dist",
-  external: ["js-tiktoken"],
   onSuccess: async () => {
     // Copy HTML files to dist
     const srcDir = "src/services";

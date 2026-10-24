@@ -1,3 +1,4 @@
+import { updateGatewayAddresses } from "./gateway-port.js";
 /**
  * Base Client Strategy - Abstract base class for all client strategies
  * Provides common functionality and enforces the strategy contract
@@ -212,6 +213,25 @@ export abstract class BaseClientStrategy implements IClientStrategy {
   }
 
   // === High-Level Operations ===
+
+  updateGatewayPort(port: number): OperationResult {
+    try {
+      const config = this.readConfig();
+      if (!config) {
+        const configPath = this.getEffectiveConfigPath(this.getPlatform());
+        if (configPath && fs.existsSync(configPath)) {
+          return { success: false, error: "Cannot read client configuration at " + configPath };
+        }
+        return { success: true };
+      }
+      const servers = this.getServersFromConfig(config);
+      if (!servers || !updateGatewayAddresses(servers, port)) return { success: true };
+      const success = this.writeConfig(this.setServersInConfig(config, servers));
+      return { success, error: success ? undefined : "Failed to update client port" };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
 
   connect(port: number, profileId?: string): OperationResult {
     const platform = this.getPlatform();

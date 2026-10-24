@@ -55,8 +55,6 @@ export class ZedStrategy extends BaseClientStrategy {
     },
   };
 
-  // === Server Container Access (Zed uses context_servers, not standard MCP keys) ===
-
   protected getServersFromConfig(
     config: ClientMcpConfig
   ): Record<string, ClientServerConfig> | undefined {
@@ -65,11 +63,9 @@ export class ZedStrategy extends BaseClientStrategy {
 
   protected setServersInConfig(
     config: ClientMcpConfig,
-    _servers: Record<string, ClientServerConfig>
+    servers: Record<string, ClientServerConfig>
   ): ClientMcpConfig {
-    // Zed uses context_servers, not mcpServers/servers
-    // Gateway methods are fully overridden to use context_servers
-    return config;
+    return { ...config, context_servers: servers };
   }
 
   readConfig(): ClientMcpConfig | null {
@@ -86,7 +82,7 @@ export class ZedStrategy extends BaseClientStrategy {
       if (!parsed || typeof parsed !== "object") {
         return null;
       }
-      return parsed;
+      return parsed as ZedConfig;
     } catch (error) {
       this.log.debug(`Failed to read config from ${configPath}:`, error);
       return null;

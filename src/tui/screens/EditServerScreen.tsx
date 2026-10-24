@@ -9,7 +9,6 @@ import TextInput from "ink-text-input";
 import SelectInput from "ink-select-input";
 import { ScreenLayout } from "../components/index.js";
 import { getConfigService } from "../../services/config.service.js";
-import { getDaemonService } from "../../services/daemon.service.js";
 import type { LocalServer, RemoteServer, TransportType } from "../../types/index.js";
 import { REDACTED_PLACEHOLDER } from "../../shared/redaction.js";
 import { useTheme } from "../theme/index.js";
@@ -41,7 +40,6 @@ export function EditServerScreen({
 }: EditServerScreenProps): React.ReactElement {
   const { theme } = useTheme();
   const configService = getConfigService();
-  const daemonService = getDaemonService();
 
   const initialForm = useMemo(
     () =>
@@ -81,14 +79,6 @@ export function EditServerScreen({
   const [step, setStep] = useState(Step.Name);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshDaemonIfRunning = useCallback(() => {
-    if (daemonService.isDaemonRunning().running) {
-      daemonService.refreshDaemon().catch(() => {
-        // Swallow to avoid breaking the editor.
-      });
-    }
-  }, [daemonService]);
-
   const updateForm = useCallback((changes: Partial<ServerFormFields>) => {
     setForm((prev) => ({ ...prev, ...changes }));
   }, []);
@@ -106,9 +96,8 @@ export function EditServerScreen({
       return;
     }
 
-    refreshDaemonIfRunning();
     onSaved({ ...(server as LocalServer), ...prepared.data });
-  }, [configService, form, onSaved, refreshDaemonIfRunning, server]);
+  }, [configService, form, onSaved, server]);
 
   const saveRemoteServer = useCallback(() => {
     const prepared = prepareRemoteServerUpdates(form);
@@ -123,9 +112,8 @@ export function EditServerScreen({
       return;
     }
 
-    refreshDaemonIfRunning();
     onSaved({ ...(server as RemoteServer), ...prepared.data });
-  }, [configService, form, onSaved, refreshDaemonIfRunning, server]);
+  }, [configService, form, onSaved, server]);
 
   const handleSubmit = useCallback(() => {
     if (type === "local") {

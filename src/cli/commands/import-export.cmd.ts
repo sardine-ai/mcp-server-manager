@@ -207,6 +207,10 @@ async function handleImport(
   if (mergeResult.skipped > 0) {
     console.log(`  ${colors.gray}Skipped: ${mergeResult.skipped}${colors.reset}`);
   }
+  for (const failure of mergeResult.errors || []) {
+    console.error(failure.serverId + ": " + failure.error);
+  }
+  if (mergeResult.errors?.length) process.exitCode = 1;
 }
 
 /** Handle export command */

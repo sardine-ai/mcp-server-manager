@@ -138,6 +138,7 @@ export interface ConflictDecision {
 
 /** Merge results with conflict resolution */
 export interface MergeResults {
+  errors?: Array<{ serverId: string; error: string }>;
   added: number;
   updated: number;
   skipped: number;

@@ -3,8 +3,9 @@ import { Command } from "commander";
 
 const mocks = vi.hoisted(() => ({
   changeGatewayPort: vi.fn(async (_port: number) => {
-    const result: { success: boolean; warnings: string[]; error?: string } = {
+    const result: { success: boolean; port: number; warnings: string[]; error?: string } = {
       success: true,
+      port: 9000,
       warnings: [],
     };
     return result;
@@ -40,14 +41,24 @@ describe("CLI gateway port entry points", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.changeGatewayPort.mockResolvedValue({ success: true, warnings: [], error: undefined });
+    mocks.changeGatewayPort.mockResolvedValue({
+      success: true,
+      port: 9000,
+      warnings: [],
+      error: undefined,
+    });
+    process.exitCode = 0;
     vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("exit");
     });
   });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    process.exitCode = 0;
+    vi.restoreAllMocks();
+  });
 
   it.each([
     ["port", "9000"],
@@ -62,17 +73,19 @@ describe("CLI gateway port entry points", () => {
     ["port", "9000"],
     ["settings", "set", "port", "9000"],
     ["settings", "reset", "--yes"],
-  ])("prints partial failures for %j without failing a saved change", async (...args) => {
+  ])("reports partial failures for %j with an unsuccessful exit status", async (...args) => {
     mocks.changeGatewayPort.mockResolvedValue({
-      success: true,
+      success: false,
+      port: 9000,
       warnings: ["project config is read-only"],
-      error: undefined,
+      error: "project config is read-only",
     });
     await run(args);
-    expect(console.log).toHaveBeenCalledWith(
+    expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining("project config is read-only")
     );
     expect(process.exit).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
   });
 
   it("resets the port through the shared operation before resetting other settings", async () => {
@@ -87,12 +100,14 @@ describe("CLI gateway port entry points", () => {
   it("does not reset settings after the port change is rejected", async () => {
     mocks.changeGatewayPort.mockResolvedValue({
       success: false,
+      port: 8850,
       warnings: [],
       error: "cannot save port",
     });
-    await expect(run(["settings", "reset", "--yes"])).rejects.toThrow("exit");
+    await run(["settings", "reset", "--yes"]);
+    expect(process.exitCode).toBe(1);
     expect(mocks.reset).not.toHaveBeenCalled();
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("cannot save port"));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("cannot save port"));
   });
 
   it("reports a settings reset write failure after saving the port", async () => {
@@ -100,10 +115,11 @@ describe("CLI gateway port entry points", () => {
       throw new Error("read-only settings");
     });
     await run(["settings", "reset", "--yes"]);
-    expect(console.log).toHaveBeenCalledWith(
+    expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining("settings could not be reset")
     );
     expect(process.exit).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
   });
 
   it("keeps non-port settings on their existing path", async () => {

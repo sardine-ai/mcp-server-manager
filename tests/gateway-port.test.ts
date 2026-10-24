@@ -5,7 +5,8 @@ import path from "path";
 import TOML from "@iarna/toml";
 
 const daemon = vi.hoisted(() => ({
-  isDaemonRunning: vi.fn(() => ({ running: false })),
+  getPortUpdateStatus: vi.fn((): { running: boolean; pid?: number } => ({ running: false })),
+  checkHealth: vi.fn(async () => ({ status: "ok" })),
   refreshDaemon: vi.fn(async () => ({ success: true })),
 }));
 vi.mock("../src/services/daemon.service.js", () => ({ getDaemonService: () => daemon }));
@@ -43,7 +44,7 @@ describe("Gateway port changes", () => {
     resetClientService();
     resetConfigService();
     resetSettingsService();
-    daemon.isDaemonRunning.mockReturnValue({ running: false });
+    daemon.getPortUpdateStatus.mockReturnValue({ running: false });
     daemon.refreshDaemon.mockResolvedValue({ success: true });
     vi.clearAllMocks();
   });
@@ -73,7 +74,7 @@ describe("Gateway port changes", () => {
       const { projectDir, strategy } = connect("project", clientId, "deleted-profile");
       expect(new ClientService(projectDir).connectClient(clientId).success).toBe(true);
       const result = await changeGatewayPort(9000);
-      expect(result).toEqual({ success: true, warnings: [] });
+      expect(result).toMatchObject({ success: true, port: 9000, warnings: [] });
       const config = strategy.readConfig();
       if (clientId !== "codex") expect(config).toHaveProperty("marker", "keep");
       expect(strategy.getGatewayKeys(config || {}).sort()).toEqual([
@@ -121,7 +122,7 @@ describe("Gateway port changes", () => {
     fs.unlinkSync(path.join(missing.projectDir, ".vscode/mcp.json"));
     disconnected.strategy.writeConfig({ servers: { unrelated: { command: "keep" } } });
     const result = await changeGatewayPort(9000);
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toContain("config is missing");
     expect(fs.existsSync(path.join(missing.projectDir, ".vscode/mcp.json"))).toBe(false);
@@ -138,7 +139,7 @@ describe("Gateway port changes", () => {
     const original = fs.readFileSync(brokenPath, "utf8");
     fs.writeFileSync(brokenPath, "{broken");
     const result = await changeGatewayPort(9000);
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
     expect(result.warnings[0]).toContain(brokenPath);
     expect(fs.readFileSync(brokenPath, "utf8")).toBe("{broken");
     expect(fs.readFileSync(path.join(valid.projectDir, ".cursor/mcp.json"), "utf8")).toContain(
@@ -159,8 +160,8 @@ describe("Gateway port changes", () => {
       return originalWrite(file, data, options);
     });
     const result = await changeGatewayPort(9000);
-    expect(result.success).toBe(true);
-    expect(result.warnings[0]).toContain("Failed to write config");
+    expect(result.success).toBe(false);
+    expect(result.warnings[0]).toContain("Failed to update client port");
     expect(fs.readFileSync(configPath, "utf8")).toBe(before);
     expect(getConfigService().getPort()).toBe(9000);
   });
@@ -216,23 +217,23 @@ describe("Gateway port changes", () => {
     const registryPath = getConfigService().getPaths().clientsStatePath;
     fs.writeFileSync(registryPath, "{broken");
     const result = await changeGatewayPort(9000);
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
     expect(result.warnings[0]).toContain("Project gateways could not be updated");
     expect(fs.readFileSync(registryPath, "utf8")).toBe("{broken");
   });
 
-  it("refreshes a running daemon using its previous port", async () => {
-    daemon.isDaemonRunning.mockReturnValue({ running: true });
+  it("refreshes a running daemon using its captured identity", async () => {
+    daemon.getPortUpdateStatus.mockReturnValue({ running: true, pid: 12345 });
     expect((await changeGatewayPort(9000)).warnings).toEqual([]);
-    expect(daemon.isDaemonRunning).toHaveBeenCalledWith(8850);
-    expect(daemon.refreshDaemon).toHaveBeenCalledWith(8850);
+    expect(daemon.getPortUpdateStatus).toHaveBeenCalledWith();
+    expect(daemon.refreshDaemon).toHaveBeenCalledWith({ running: true, pid: 12345 }, true);
   });
 
   it("warns when daemon refresh fails after saving the port", async () => {
-    daemon.isDaemonRunning.mockReturnValue({ running: true });
+    daemon.getPortUpdateStatus.mockReturnValue({ running: true, pid: 12345 });
     daemon.refreshDaemon.mockRejectedValue(new Error("signal failed"));
     const result = await changeGatewayPort(9000);
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
     expect(result.warnings[0]).toContain("Restart the daemon");
     expect(getConfigService().getPort()).toBe(9000);
   });
@@ -241,10 +242,8 @@ describe("Gateway port changes", () => {
     const service = getConfigService();
     const configPath = service.getPaths().configPath;
     const before = fs.readFileSync(configPath, "utf8");
-    const originalWrite = fs.writeFileSync;
-    vi.spyOn(fs, "writeFileSync").mockImplementation((file, data, options) => {
-      if (file === configPath) throw new Error("cannot save port");
-      return originalWrite(file, data, options);
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw new Error("cannot save port");
     });
     expect(await changeGatewayPort(9000)).toMatchObject({
       success: false,
@@ -261,7 +260,7 @@ describe("Gateway port changes", () => {
       const before = getConfigService().getPort();
       expect((await changeGatewayPort(port)).success).toBe(false);
       expect(getConfigService().getPort()).toBe(before);
-      expect(daemon.isDaemonRunning).not.toHaveBeenCalled();
+      expect(daemon.getPortUpdateStatus).not.toHaveBeenCalled();
     }
   );
 });

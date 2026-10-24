@@ -490,165 +490,85 @@ export class ImportExportService {
 
     for (const server of servers) {
       const decision = decisions.get(server.id) || "skip";
+      if (server.serverType === "remote" ? !server.url : !server.command) {
+        console.warn(
+          "Skipping " +
+            server.serverType +
+            " server " +
+            server.id +
+            ": missing " +
+            (server.serverType === "remote" ? "URL" : "command")
+        );
+        results.skipped++;
+        continue;
+      }
 
-      if (server.serverType === "remote") {
-        if (!server.url) {
-          console.warn(`Skipping remote server ${server.id}: missing URL`);
+      try {
+        const existing =
+          server.serverType === "remote"
+            ? configService.findRemoteServer(server.id)
+            : configService.findLocalServer(server.id);
+        if (existing && decision === "skip") {
           results.skipped++;
           continue;
         }
 
-        const existing = configService.findRemoteServer(server.id);
-
-        if (existing) {
-          if (decision === "overwrite") {
-            configService.updateRemoteServer(server.id, {
-              name: server.name || server.id,
-              url: server.url,
-              type: (server.type || "http") as TransportType,
-              headers: server.headers,
-              bearerToken: server.bearerToken,
-            });
-            results.updated++;
-          } else if (decision === "merge") {
-            const mergedServer = this.mergeServerFields(existing, server) as RemoteServer;
-            configService.updateRemoteServer(server.id, mergedServer);
-            if (results.merged !== undefined) {
-              results.merged++;
-            }
-          } else {
-            results.skipped++;
-          }
+        const operation = existing ? (decision === "merge" ? "merged" : "updated") : "added";
+        let result;
+        if (server.serverType === "remote") {
+          const payload =
+            existing && decision === "merge"
+              ? (this.mergeServerFields(existing, server) as RemoteServer)
+              : {
+                  id: server.id,
+                  name: server.name || server.id,
+                  url: server.url || "",
+                  type: server.type || "http",
+                  headers: server.headers,
+                  bearerToken: server.bearerToken,
+                };
+          result = existing
+            ? configService.updateRemoteServer(server.id, payload)
+            : configService.addRemoteServer(payload);
         } else {
-          configService.addRemoteServer({
-            id: server.id,
-            name: server.name || server.id,
-            url: server.url,
-            type: (server.type || "http") as TransportType,
-            headers: server.headers,
-            bearerToken: server.bearerToken,
-          });
-          results.added++;
+          const payload =
+            existing && decision === "merge"
+              ? (this.mergeServerFields(existing, server) as LocalServer)
+              : {
+                  id: server.id,
+                  name: server.name || server.id,
+                  command: server.command || "",
+                  args: server.args || [],
+                  env: server.env,
+                };
+          result = existing
+            ? configService.updateLocalServer(server.id, payload)
+            : configService.addLocalServer(payload);
         }
-      } else {
-        if (!server.command) {
-          console.warn(`Skipping local server ${server.id}: missing command`);
-          results.skipped++;
+        if (!result.success) {
+          (results.errors ??= []).push({
+            serverId: server.id,
+            error: result.error || "Import failed",
+          });
           continue;
         }
-
-        const existing = configService.findLocalServer(server.id);
-
-        if (existing) {
-          if (decision === "overwrite") {
-            configService.updateLocalServer(server.id, {
-              name: server.name || server.id,
-              command: server.command,
-              args: server.args || [],
-              env: server.env,
-            });
-            results.updated++;
-          } else if (decision === "merge") {
-            const mergedServer = this.mergeServerFields(existing, server) as LocalServer;
-            configService.updateLocalServer(server.id, mergedServer);
-            if (results.merged !== undefined) {
-              results.merged++;
-            }
-          } else {
-            results.skipped++;
-          }
-        } else {
-          configService.addLocalServer({
-            id: server.id,
-            name: server.name || server.id,
-            command: server.command,
-            args: server.args || [],
-            env: server.env,
-          });
-          results.added++;
-        }
+        results[operation] = (results[operation] || 0) + 1;
+      } catch (error) {
+        (results.errors ??= []).push({
+          serverId: server.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
-
     return results;
   }
 
   /** Merge servers into config */
   mergeServers(servers: ImportedServer[], options: { overwrite?: boolean } = {}): MergeResults {
-    const configService = getConfigService();
-    const { overwrite = false } = options;
-    const results: MergeResults = { added: 0, skipped: 0, updated: 0, merged: 0 };
-
-    for (const server of servers) {
-      if (server.serverType === "remote") {
-        // Validate required fields for remote server
-        if (!server.url) {
-          console.warn(`Skipping remote server ${server.id}: missing URL`);
-          results.skipped++;
-          continue;
-        }
-
-        const existing = configService.findRemoteServer(server.id);
-
-        if (existing) {
-          if (overwrite) {
-            configService.updateRemoteServer(server.id, {
-              name: server.name || server.id,
-              url: server.url,
-              type: (server.type || "http") as TransportType,
-              headers: server.headers,
-              bearerToken: server.bearerToken,
-            });
-            results.updated++;
-          } else {
-            results.skipped++;
-          }
-        } else {
-          configService.addRemoteServer({
-            id: server.id,
-            name: server.name || server.id,
-            url: server.url,
-            type: (server.type || "http") as TransportType,
-            headers: server.headers,
-            bearerToken: server.bearerToken,
-          });
-          results.added++;
-        }
-      } else {
-        // Validate required fields for local server
-        if (!server.command) {
-          console.warn(`Skipping local server ${server.id}: missing command`);
-          results.skipped++;
-          continue;
-        }
-        const existing = configService.findLocalServer(server.id);
-
-        if (existing) {
-          if (overwrite) {
-            configService.updateLocalServer(server.id, {
-              name: server.name || server.id,
-              command: server.command,
-              args: server.args || [],
-              env: server.env,
-            });
-            results.updated++;
-          } else {
-            results.skipped++;
-          }
-        } else {
-          configService.addLocalServer({
-            id: server.id,
-            name: server.name || server.id,
-            command: server.command,
-            args: server.args || [],
-            env: server.env,
-          });
-          results.added++;
-        }
-      }
-    }
-
-    return results;
+    const decisions = new Map<string, ConflictResolution>(
+      servers.map((server) => [server.id, options.overwrite ? "overwrite" : "skip"])
+    );
+    return this.mergeServersWithDecisions(servers, decisions);
   }
 
   /** Export to JSON format (Claude Desktop / Cursor compatible) */

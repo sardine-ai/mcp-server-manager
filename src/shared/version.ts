@@ -1,9 +1,6 @@
 /**
  * Package version - imported from package.json
  */
-import { createRequire } from "module";
-
-const require = createRequire(import.meta.url);
-const packageJson = require("../../package.json") as { version: string };
+import packageJson from "../../package.json" with { type: "json" };
 
 export const VERSION = packageJson.version;

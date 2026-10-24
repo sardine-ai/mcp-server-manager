@@ -172,6 +172,7 @@ vi.mock("../src/services/oauth-transport.provider.js", () => ({
 
 import {
   getGatewayStatus,
+  refreshGateway,
   refreshGatewayTools,
   resetGatewayStateForTests,
   setGatewayStateForTests,
@@ -304,6 +305,38 @@ describe("GatewayService unit coverage", () => {
     resetGatewayStateForTests();
   });
 
+  it("moves its actual listener to the configured port during refresh", async () => {
+    const { port } = await setupGatewayMocks();
+    await expect(startGateway([])).resolves.toEqual({ success: true });
+    const nextPort = await getFreePort();
+    serviceMocks.configService.getPort.mockReturnValue(nextPort);
+    await expect(refreshGateway("port fixture")).resolves.toEqual({ success: true });
+    const response = await fetch("http://127.0.0.1:" + nextPort + "/health");
+    expect(response.status).toBe(200);
+    expect(getGatewayStatus().port).toBe(nextPort);
+    await expect(fetch("http://127.0.0.1:" + port + "/health")).rejects.toThrow();
+  });
+
+  it("retries listener relocation after the destination port becomes available", async () => {
+    await setupGatewayMocks();
+    await expect(startGateway([])).resolves.toEqual({ success: true });
+    const blocker = net.createServer();
+    await new Promise<void>((resolve) => blocker.listen(0, "127.0.0.1", resolve));
+    const address = blocker.address();
+    if (!address || typeof address === "string") throw new Error("Missing fixture port");
+    serviceMocks.configService.getPort.mockReturnValue(address.port);
+    try {
+      await expect(refreshGateway("occupied port")).resolves.toMatchObject({ success: false });
+    } finally {
+      await new Promise<void>((resolve) => blocker.close(() => resolve()));
+    }
+
+    await expect(refreshGateway("retry port")).resolves.toEqual({ success: true });
+    const response = await fetch("http://127.0.0.1:" + address.port + "/health");
+    expect(response.status).toBe(200);
+    expect(getGatewayStatus().port).toBe(address.port);
+  });
+
   it("starts on loopback, connects selected servers, serves health and MCP requests, then stops", async () => {
     const { port, local, remoteHttp, remoteSse } = await setupGatewayMocks();
 
@@ -319,7 +352,8 @@ describe("GatewayService unit coverage", () => {
     });
     expect(sdkMocks.StdioClientTransport).toHaveBeenCalledWith({
       command: "/bin/zsh",
-      args: ["-l", "-c", expect.stringContaining("node server.js")],
+      args: ["-l", "-c", expect.stringContaining('exec "$@"'), "mcpsm", "node", "server.js"],
+      stderr: "inherit",
       env: expect.objectContaining({ API_KEY: "secret" }),
     });
     expect(sdkMocks.StreamableHTTPClientTransport).toHaveBeenCalledWith(

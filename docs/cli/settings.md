@@ -79,7 +79,9 @@ mcpsm settings reset
 
 ### port
 
-Gateway HTTP port number. Port edits and settings reset update existing global and registered project gateways and refresh the running daemon. A failed client config produces a warning while the saved port change proceeds; repair the reported path and repeat the port command to retry.
+Gateway HTTP port number, stored in `config.json`. Reads and updates match `mcpsm port` and TUI settings.
+
+Port updates rewrite existing global and registered project client gateways and refresh a running daemon. Failures return a nonzero exit status and report the saved port; successful updates are retained. Reset applies the same workflow with port 8850.
 
 ```bash
 mcpsm settings set port 8080

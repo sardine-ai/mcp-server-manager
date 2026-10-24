@@ -9,13 +9,13 @@ MCP Server Manager stores configuration in two main locations:
 
 All mcpsm settings are stored in `~/.mcp-manager/`:
 
-| File                | Description                               |
-| ------------------- | ----------------------------------------- |
-| `config.json`       | Server configurations (local and remote)  |
-| `tool-filters.json` | Per-server tool enable/disable settings   |
-| `settings.json`     | Application settings (port, editor, etc.) |
-| `profiles.json`     | Server profiles (grouping by context)     |
-| `clients.json`      | Client connection state cache             |
+| File                | Description                              |
+| ------------------- | ---------------------------------------- |
+| `config.json`       | Server configurations (local and remote) |
+| `tool-filters.json` | Per-server tool enable/disable settings  |
+| `settings.json`     | Application settings (editor)            |
+| `profiles.json`     | Server profiles (grouping by context)    |
+| `clients.json`      | Client connection state cache            |
 
 On macOS and Linux, mcpsm creates `~/.mcp-manager/` with private directory
 permissions (`0700`) and writes mcpsm-owned JSON files with private file
@@ -75,7 +75,6 @@ Application-wide settings:
 
 ```json
 {
-  "port": 8850,
   "editor": "code"
 }
 ```
@@ -89,13 +88,15 @@ Application-wide settings:
 
 ### Port Changes
 
-When you change the `port` setting, **all connected clients are automatically updated**:
+The gateway port is stored in `config.json`. The port command, settings commands, and TUI settings use that same value. A valid config port takes precedence over the legacy `settings.json.port` value; the legacy value is used only when config has no valid port. The default remains 8850.
 
-1. All clients with the mcpsm gateway are detected
-2. The gateway is removed and re-added with the new port
-3. Changes are written to both primary and real-time config paths
-4. For real-time clients (Cursor, Windsurf, VS Code, Zed), changes take effect immediately
-5. For other clients, they'll use the new port on next restart
+Changing the port updates existing bare and profile gateways in each client's effective configuration path. Disconnected profiles and unrelated fields remain unchanged. Real-time clients see the update immediately; other clients may need a restart.
+
+A running daemon is signaled to move its listener, and readiness is checked at the new port. If a client update or readiness check fails, the new port stays saved and the failure is reported. Reapplying the same port retries client updates without rewriting entries that already match. It also retries a running daemon identified by its saved PID, even if the listener has not moved to the saved port.
+
+### Invalid configuration files
+
+Missing files use defaults. Existing malformed or unreadable manager files cause an error naming the file; mcpsm does not replace them with defaults. Inspect and fix the file, or deliberately move it aside before retrying. Private file writes use atomic replacement with private permissions.
 
 ## profiles.json
 

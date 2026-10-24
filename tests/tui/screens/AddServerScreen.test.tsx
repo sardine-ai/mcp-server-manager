@@ -246,21 +246,19 @@ describe("AddServerScreen", () => {
           bearerToken: "bearer-token",
         })
       );
-      expect(mockTestingService.testRemoteServer).toHaveBeenCalledWith(
+      expect(mockTestingService.testAndAuthenticate).toHaveBeenCalledWith(
         expect.objectContaining({ id: "remote-test" }),
-        true
+        expect.any(Function),
+        expect.objectContaining({ onPhase: expect.any(Function) })
       );
       expect(lastFrame()).toContain("OK");
     });
 
     it("should run OAuth when a remote server test requires authentication", async () => {
-      mockTestingService.testRemoteServer
-        .mockResolvedValueOnce({
-          success: false,
-          requiresAuth: true,
-          authRequirements: { issuer: "https://auth.example.test" },
-        })
-        .mockResolvedValueOnce({ success: true, toolCount: 4 });
+      mockTestingService.testAndAuthenticate.mockImplementationOnce(async (_server, onUrl) => {
+        await onUrl("https://auth.example.test/authorize");
+        return { success: true, toolCount: 4 };
+      });
 
       const { stdin, lastFrame } = render(<AddServerScreen onBack={mockOnBack} />);
 
@@ -273,17 +271,8 @@ describe("AddServerScreen", () => {
       await submitInput(stdin);
       await waitForStateUpdate(700);
 
-      expect(mockConfigService.updateRemoteServer).toHaveBeenCalledWith("oauth-remote", {
-        oauth: { enabled: true },
-      });
-      expect(mockAuthService.startOAuthFlow).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "oauth-remote", oauth: { enabled: true } }),
-        { issuer: "https://auth.example.test" }
-      );
-      expect(mockAuthService.waitForAuth).toHaveBeenCalledWith("state-1");
-      expect(mockAuthService.stopCallbackServer).toHaveBeenCalled();
-      expect(mockTestingService.testRemoteServer).toHaveBeenLastCalledWith(
-        expect.objectContaining({ id: "oauth-remote", oauth: { enabled: true } })
+      expect(mockTestingService.testAndAuthenticate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "oauth-remote" }), expect.any(Function), expect.any(Object)
       );
       expect(lastFrame()).toContain("OK");
     });

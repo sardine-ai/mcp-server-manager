@@ -2,7 +2,7 @@
  * AddServerScreen - Interactive server addition (ink component)
  */
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Box, Text, useInput, useApp } from "ink";
 import TextInput from "ink-text-input";
 import SelectInput from "ink-select-input";
@@ -11,8 +11,7 @@ import open from "open";
 import { ScreenLayout } from "../components/index.js";
 import { getConfigService } from "../../services/config.service.js";
 import { getTestingService } from "../../services/testing.service.js";
-import { getAuthService } from "../../services/auth.service.js";
-import { getDaemonService } from "../../services/daemon.service.js";
+import { refreshDaemonIfRunning as refreshRunningDaemon } from "../../services/daemon-refresh.js";
 import { useTheme } from "../theme/index.js";
 import {
   createServerFormFields,
@@ -40,16 +39,18 @@ export function AddServerScreen({ onBack }: AddServerScreenProps): React.ReactEl
   const { theme } = useTheme();
   useApp(); // keep the Ink app alive
 
+  const lifetime = useRef(new AbortController());
+  useEffect(() => () => lifetime.current.abort(), []);
+
   const configService = getConfigService();
   const testingService = getTestingService();
 
   const refreshDaemonIfRunning = useCallback(() => {
-    const daemonService = getDaemonService();
-    if (daemonService.isDaemonRunning().running) {
-      daemonService.refreshDaemon().catch((error) => {
-        console.error("Failed to refresh daemon after server changes:", error);
-      });
-    }
+    refreshRunningDaemon().then((result) => {
+      if (!result.success) console.error("Daemon refresh failed: " + result.error);
+    }).catch((error) => {
+      console.error("Daemon refresh failed:", error);
+    });
   }, []);
 
   const [form, setForm] = useState<ServerFormFields>(() => createServerFormFields());
@@ -138,16 +139,19 @@ export function AddServerScreen({ onBack }: AddServerScreenProps): React.ReactEl
 
       try {
         const test = await testingService.testLocalServer(prepared.data);
-        setTestResult(test);
+        if (!lifetime.current.signal.aborted) setTestResult(test);
       } catch (err) {
+        if (lifetime.current.signal.aborted) return;
         setTestResult({
           success: false,
           error: err instanceof Error ? err.message : "Unknown error",
         });
       } finally {
-        setIsTesting(false);
-        setStep(Step.Done);
-        refreshDaemonIfRunning();
+        if (!lifetime.current.signal.aborted) {
+          setIsTesting(false);
+          setStep(Step.Done);
+          refreshDaemonIfRunning();
+        }
       }
     },
     [configService, refreshDaemonIfRunning, testingService]
@@ -173,47 +177,29 @@ export function AddServerScreen({ onBack }: AddServerScreenProps): React.ReactEl
       setIsTesting(true);
 
       try {
-        const test = await testingService.testRemoteServer(prepared.data, true);
-        if (test.requiresAuth) {
-          setStep(Step.Authenticating);
-          await configService.updateRemoteServer(prepared.data.id, { oauth: { enabled: true } });
-          const updatedServer = { ...prepared.data, oauth: { enabled: true } };
-          const authService = getAuthService();
-          const flow = await authService.startOAuthFlow(updatedServer, test.authRequirements);
-
-          if (flow) {
-            try {
-              await open(flow.authUrl);
-            } catch {
-              // Ignore browser open errors
+        const test = await testingService.testAndAuthenticate(prepared.data, async (url) => {
+          try { await open(url); } catch { setError("Open this URL to authenticate: " + url); }
+        }, {
+          signal: lifetime.current.signal,
+          onPhase: (phase) => {
+            if (!lifetime.current.signal.aborted && (phase === "authorization-required" || phase === "waiting")) {
+              setStep(Step.Authenticating);
             }
-            const authResult = await authService.waitForAuth(flow.state);
-            authService.stopCallbackServer();
-
-            if (authResult.success) {
-              const retest = await testingService.testRemoteServer(updatedServer);
-              setTestResult(retest);
-            } else {
-              setTestResult({
-                success: false,
-                error: authResult.error || "Authentication failed",
-              });
-            }
-          } else {
-            setTestResult({ success: false, error: "Could not start OAuth flow" });
-          }
-        } else {
-          setTestResult(test);
-        }
+          },
+        });
+        if (!lifetime.current.signal.aborted) setTestResult(test);
       } catch (err) {
+        if (lifetime.current.signal.aborted) return;
         setTestResult({
           success: false,
           error: err instanceof Error ? err.message : "Unknown error",
         });
       } finally {
-        setIsTesting(false);
-        setStep(Step.Done);
-        refreshDaemonIfRunning();
+        if (!lifetime.current.signal.aborted) {
+          setIsTesting(false);
+          setStep(Step.Done);
+          refreshDaemonIfRunning();
+        }
       }
     },
     [configService, refreshDaemonIfRunning, testingService]

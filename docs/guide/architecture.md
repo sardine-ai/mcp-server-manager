@@ -232,7 +232,7 @@ The system stores configuration in `~/.mcp-manager/`:
 | File                | Purpose                                              |
 | ------------------- | ---------------------------------------------------- |
 | `config.json`       | Server definitions (local STDIO and remote HTTP/SSE) |
-| `settings.json`     | Application settings (port, default editor, etc.)    |
+| `settings.json`     | Application settings (default editor)                |
 | `profiles.json`     | Server profiles (groupings by project/context)       |
 | `tool-filters.json` | Per-server tool enable/disable settings              |
 | `clients.json`      | Client connection state cache (informational only)   |
@@ -299,18 +299,16 @@ ClientService.connectClient('cursor')
 ```
 User: mcpsm port 9000
         ↓
-SettingsScreen detects port change
+Shared port coordinator (CLI and TUI)
         ↓
-1. Find all connected clients (cursor, claude, windsurf, etc.)
-2. For each connected client:
-   a. disconnectClient(id) - remove mcpsm entry
-   b. Disconnect done, port updated
-   c. connectClient(id) - add mcpsm entry with new port
-   d. Write to both primary + real-time paths
-3. Show: "Updated port for 3 clients"
-        ↓
-All clients now use new port
+1. Validate and capture the current daemon identity
+2. Persist config.json.port
+3. Rewrite existing bare/profile gateway addresses in effective client paths
+4. Signal the captured running daemon and check the new listener
+5. Report the saved port and any client or daemon failures
 ```
+
+Low-level config/settings setters change storage synchronously. The asynchronous coordinator owns client updates and daemon refresh. Partial updates are reported without multi-file rollback.
 
 ### Client Using Servers
 
@@ -347,7 +345,7 @@ Response flows back through the same path
 **SettingsService** (src/services/settings.service.ts)
 
 - Manages application settings
-- Triggers client reconnection on port changes
+- Delegates port storage to config.json; user-facing port changes use the shared coordinator
 
 **ProfileService** (src/services/profile.service.ts)
 
@@ -370,15 +368,15 @@ The system handles several error scenarios:
 
 - **Client not installed**: Returns 'not-installed' status
 - **Config file missing**: Creates new config with mcpsm gateway
-- **File write errors**: Reports error to user, doesn't partially update
+- **File write errors**: Reports the error; manager files use atomic replacement, and multi-file port updates can partially succeed
 - **Port in use**: Caught by daemon, reported to user
-- **Invalid config format**: Detects and preserves valid portions
+- **Invalid config format**: Reports the affected path and preserves the existing file
 
 ## Threading and Concurrency
 
 - Client operations are synchronous (using `fs` and `spawnSync`)
-- Port updates reconnect clients in sequence to ensure consistency
-- Settings changes are atomic per client
+- User-facing port updates are serialized within each process; external client files are updated without disconnecting gateways
+- Manager files use atomic replacement; port changes are not a transaction across files
 
 ---
 

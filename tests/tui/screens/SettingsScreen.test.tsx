@@ -5,6 +5,8 @@
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { spawnSync } from "child_process";
+import type { PortUpdateResult } from "../../../src/services/gateway-port.service.js";
+import { changeGatewayPort } from "../../../src/services/gateway-port.service.js";
 import { render } from "../setup.js";
 import {
   mockClientService,
@@ -15,10 +17,14 @@ import {
   KEYS,
 } from "../setup.js";
 
-const changeGatewayPort = vi.hoisted(() => vi.fn(async (_port: number) => { const warnings: string[] = []; return { success: true, warnings }; }));
-vi.mock("../../../src/services/gateway-port.service.js", () => ({ changeGatewayPort }));
-
 // Setup mocks before importing component
+vi.mock("../../../src/services/gateway-port.service.js", () => ({
+  changeGatewayPort: vi.fn(async () => {
+    const result: PortUpdateResult = { success: true, port: 8850, warnings: [] };
+    return result;
+  }),
+}));
+
 vi.mock("../../../src/services/settings.service.js", () => ({
   getSettingsService: vi.fn(() => mockSettingsService),
 }));
@@ -42,6 +48,7 @@ describe("SettingsScreen", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(changeGatewayPort).mockResolvedValue({ success: true, port: 8850, warnings: [] });
     mockSettingsService.getAll.mockReturnValue({ ...mockSettings });
     mockSettingsService.getKeys.mockReturnValue(
       Object.keys(mockSettings) as (keyof typeof mockSettings)[]
@@ -224,10 +231,16 @@ describe("SettingsScreen", () => {
 
       expect(changeGatewayPort).toHaveBeenCalledWith(8850);
       expect(mockClientService.disconnectClient).not.toHaveBeenCalled();
+      expect(lastFrame()).toContain("Setting updated");
     });
 
-    it("keeps partial port-update warnings visible", async () => {
-      changeGatewayPort.mockResolvedValueOnce({ success: true, warnings: ["project config is read-only"] });
+    it("keeps partial port-update errors visible", async () => {
+      vi.mocked(changeGatewayPort).mockResolvedValueOnce({
+        success: false,
+        port: 8850,
+        warnings: ["project config is read-only"],
+        error: "project config is read-only",
+      });
       const { stdin, lastFrame } = render(<SettingsScreen onBack={mockOnBack} initialKey="port" />);
       stdin.write(KEYS.ENTER);
       await waitForStateUpdate();

@@ -30,6 +30,12 @@ export PATH=~/.npm-global/bin:$PATH
 # Add the export line to your shell profile (.bashrc, .zshrc, etc.)
 ```
 
+## Configuration cannot be loaded
+
+If mcpsm reports an unreadable or invalid configuration file, inspect the path shown in the error. Fix its JSON or file permissions and retry. To start from defaults, deliberately move the file aside first. Existing invalid files are preserved; they are not automatically repaired or deleted.
+
+If a port update reports partial failure, the displayed port is the saved value. Fix client-file permissions and reapply that port to retry client updates. If daemon readiness could not be confirmed, inspect the daemon log and running process before retrying.
+
 ## Server Issues
 
 ### Server won't start / fails to connect

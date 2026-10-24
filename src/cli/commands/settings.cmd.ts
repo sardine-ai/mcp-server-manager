@@ -98,10 +98,18 @@ export function registerSettingsCommands(program: Command): void {
         process.exit(1);
       }
 
-      const result =
-        key === "port"
-          ? { ...(await changeGatewayPort(Number(value))), value: Number(value) }
-          : settingsService.set(key as keyof Settings, value);
+      if (key === "port") {
+        const result = await changeGatewayPort(Number(value));
+        if (!result.success) {
+          console.error("Port is " + result.port + ": " + result.error);
+          process.exitCode = 1;
+          return;
+        }
+        console.log("port = " + result.port);
+        return;
+      }
+
+      const result = settingsService.set(key as keyof Settings, value);
 
       if (result.success) {
         console.log(`${c.checkmark} ${key} = ${result.value}`);
@@ -132,19 +140,18 @@ export function registerSettingsCommands(program: Command): void {
       const settingsService = getSettingsService();
       const result = await changeGatewayPort(Number(settingsService.getInfo().port.default));
       if (!result.success) {
-        console.log(`${c.cross} ${result.error}`);
-        process.exit(1);
+        console.error("Port is " + result.port + ": " + result.error);
+        process.exitCode = 1;
+        return;
       }
       try {
         settingsService.reset();
         console.log(`${c.checkmark} Settings reset to defaults`);
       } catch (error) {
-        result.warnings.push(
+        console.error(
           `Port saved, but settings could not be reset: ${error instanceof Error ? error.message : String(error)}`
         );
-        console.log(`${c.checkmark} Port reset to defaults`);
+        process.exitCode = 1;
       }
-      for (const warning of result.warnings)
-        console.log(`${colors.yellow}${warning}${colors.reset}`);
     });
 }

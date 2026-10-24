@@ -2,14 +2,9 @@
  * Settings service - manages application settings
  */
 
-import fs from "fs";
 import type { Settings, SettingInfo, SettingsInfo, SettingResult } from "../types/index.js";
 import { getConfigService } from "./config.service.js";
-import { validatePort } from "../shared/validators.js";
-import { createLogger } from "../shared/logger.js";
-import { protectExistingPrivateFile, writePrivateJsonFile } from "../shared/secure-storage.js";
-
-const log = createLogger("SettingsService");
+import { readPrivateJsonFile, writePrivateJsonFile } from "../shared/secure-storage.js";
 
 /** Default settings */
 const DEFAULT_SETTINGS: Settings = {
@@ -47,36 +42,35 @@ export class SettingsService {
 
   /** Load settings from file */
   private load(): Settings {
-    try {
-      if (fs.existsSync(this.settingsPath)) {
-        protectExistingPrivateFile(this.settingsPath);
-        const data = fs.readFileSync(this.settingsPath, "utf8");
-        const parsed = JSON.parse(data) as Partial<Settings>;
-        return { ...DEFAULT_SETTINGS, ...parsed };
-      }
-    } catch (error) {
-      log.debug("Failed to load settings, using defaults:", error);
-    }
-    return { ...DEFAULT_SETTINGS };
+    const parsed = readPrivateJsonFile<Partial<Settings>>(this.settingsPath);
+    return { ...globalThis.structuredClone(DEFAULT_SETTINGS), ...parsed };
   }
 
   /** Save settings to file */
-  private save(): void {
-    writePrivateJsonFile(this.settingsPath, this.settings);
+  private save(settings = this.settings): void {
+    const { port: _port, ...stored } = settings;
+    readPrivateJsonFile(this.settingsPath);
+    writePrivateJsonFile(this.settingsPath, stored);
   }
 
   /** Get all settings */
   getAll(): Settings {
-    return { ...this.settings };
+    return { ...this.settings, port: getConfigService().getPort() };
   }
 
   /** Get a single setting */
   get<K extends keyof Settings>(key: K): Settings[K] {
-    return this.settings[key];
+    return this.getAll()[key];
   }
 
   /** Set a single setting with validation */
   set<K extends keyof Settings>(key: K, value: unknown): SettingResult {
+    if (key === "port") {
+      const port = typeof value === "string" ? Number(value) : value;
+      if (typeof port !== "number") return { success: false, error: "Port must be a number" };
+      const result = getConfigService().setPort(port);
+      return result.success ? { success: true, value: port } : result;
+    }
     const info = SETTINGS_INFO[key];
     if (!info) {
       return { success: false, error: `Unknown setting: ${key}` };
@@ -103,20 +97,20 @@ export class SettingsService {
       };
     }
 
-    if (key === "port") {
-      const validation = validatePort(Number(parsedValue));
-      if (!validation.valid) return { success: false, error: validation.error };
-    }
-    this.settings[key] = parsedValue;
-    this.save();
+    const settings = { ...this.settings, [key]: parsedValue };
+    this.save(settings);
+    this.settings = settings;
 
     return { success: true, value: parsedValue };
   }
 
   /** Reset all settings to defaults */
   reset(): void {
-    this.settings = { ...DEFAULT_SETTINGS };
-    this.save();
+    const result = getConfigService().setPort(DEFAULT_SETTINGS.port);
+    if (!result.success) throw new Error(result.error);
+    const settings = { ...DEFAULT_SETTINGS };
+    this.save(settings);
+    this.settings = settings;
   }
 
   /** Get settings metadata */
@@ -131,7 +125,7 @@ export class SettingsService {
 
   /** Check if a value is the default */
   isDefault<K extends keyof Settings>(key: K): boolean {
-    return this.settings[key] === DEFAULT_SETTINGS[key];
+    return this.get(key) === DEFAULT_SETTINGS[key];
   }
 
   /** Get available keys */

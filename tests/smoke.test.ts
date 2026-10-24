@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { execSync } from "child_process";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { execSync, execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -8,7 +8,24 @@ import os from "os";
 const testConfigDir = path.join(os.tmpdir(), "mcpsm-smoke-test-" + Date.now());
 
 describe("CLI Smoke Tests", () => {
+  it("loads the built package root and TUI entry points with the package version", () => {
+    const result = execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        'const root = await import("./dist/index.js"); const tui = await import("./dist/tui/index.js"); console.log(JSON.stringify({version:root.VERSION,tui:typeof tui.startTui}));',
+      ],
+      { encoding: "utf8", cwd: process.cwd() }
+    );
+    expect(JSON.parse(result)).toEqual({
+      version: JSON.parse(fs.readFileSync("package.json", "utf8")).version,
+      tui: "function",
+    });
+  });
+
   beforeEach(() => {
+    vi.stubEnv("MCP_MANAGER_CONFIG_DIR", testConfigDir);
     // Create test config directory
     if (!fs.existsSync(testConfigDir)) {
       fs.mkdirSync(testConfigDir, { recursive: true });
@@ -49,6 +66,7 @@ describe("CLI Smoke Tests", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     // Cleanup
     if (fs.existsSync(testConfigDir)) {
       fs.rmSync(testConfigDir, { recursive: true, force: true });

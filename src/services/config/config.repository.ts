@@ -1,14 +1,11 @@
-import fs from "fs";
+import { validatePort } from "../../shared/validators.js";
 import path from "path";
 import type { AppConfig, ConfigPaths, SelectionState, ToolFilters } from "../../types/index.js";
-import { createLogger } from "../../shared/logger.js";
 import {
   ensurePrivateDirectory,
-  protectExistingPrivateFile,
+  readPrivateJsonFile,
   writePrivateJsonFile,
 } from "../../shared/secure-storage.js";
-
-const log = createLogger("ConfigRepository");
 
 const DEFAULT_CONFIG: AppConfig = {
   servers: [],
@@ -44,9 +41,12 @@ export class ConfigRepository {
   }
 
   reload(): void {
-    this.config = this.loadConfig();
-    this.toolFilters = this.loadToolFilters();
-    this.selectionState = this.loadSelectionState();
+    const config = this.loadConfig();
+    const toolFilters = this.loadToolFilters();
+    const selectionState = this.loadSelectionState();
+    this.config = config;
+    this.toolFilters = toolFilters;
+    this.selectionState = selectionState;
   }
 
   getPaths(): ConfigPaths {
@@ -62,8 +62,10 @@ export class ConfigRepository {
   }
 
   updateConfig(mutator: (config: AppConfig) => void): void {
-    mutator(this.config);
-    this.saveConfig();
+    const next = globalThis.structuredClone(this.config);
+    mutator(next);
+    writePrivateJsonFile(this.paths.configPath, next);
+    this.config = next;
   }
 
   getToolFilters(): ToolFilters {
@@ -75,8 +77,10 @@ export class ConfigRepository {
   }
 
   updateToolFilters(mutator: (filters: ToolFilters) => void): void {
-    mutator(this.toolFilters);
-    this.saveToolFilters();
+    const next = globalThis.structuredClone(this.toolFilters);
+    mutator(next);
+    writePrivateJsonFile(this.paths.toolFiltersPath, next);
+    this.toolFilters = next;
   }
 
   getSelectionState(): SelectionState {
@@ -84,8 +88,8 @@ export class ConfigRepository {
   }
 
   saveSelectionState(state: SelectionState): void {
-    this.selectionState = state;
     writePrivateJsonFile(this.paths.selectionStatePath, state);
+    this.selectionState = state;
   }
 
   private ensureConfigDir(): void {
@@ -93,56 +97,37 @@ export class ConfigRepository {
   }
 
   private loadConfig(): AppConfig {
-    try {
-      if (fs.existsSync(this.paths.configPath)) {
-        protectExistingPrivateFile(this.paths.configPath);
-        const data = fs.readFileSync(this.paths.configPath, "utf8");
-        const parsed = JSON.parse(data) as Partial<AppConfig>;
-
-        const normalizeServers = (servers: unknown[]): AppConfig["servers"] =>
-          Array.isArray(servers) ? servers.map((s) => s as AppConfig["servers"][number]) : [];
-
-        const normalizeRemoteServers = (servers: unknown[]): AppConfig["remoteServers"] =>
-          Array.isArray(servers) ? servers.map((s) => s as AppConfig["remoteServers"][number]) : [];
-
-        return {
-          servers: normalizeServers(parsed.servers || []),
-          remoteServers: normalizeRemoteServers(parsed.remoteServers || []),
-          port: typeof parsed.port === "number" ? parsed.port : DEFAULT_CONFIG.port,
-        };
-      }
-    } catch (error) {
-      log.debug("Failed to load config, using defaults:", error);
-    }
-
-    const fallback = { ...DEFAULT_CONFIG };
-    writePrivateJsonFile(this.paths.configPath, fallback);
-    return fallback;
+    const parsed = readPrivateJsonFile<Partial<AppConfig>>(this.paths.configPath);
+    const legacy =
+      parsed && typeof parsed.port === "number" && validatePort(parsed.port).valid
+        ? undefined
+        : readPrivateJsonFile<{ port?: unknown }>(this.paths.settingsPath);
+    const legacyPort =
+      typeof legacy?.port === "number" && validatePort(legacy.port).valid
+        ? legacy.port
+        : DEFAULT_CONFIG.port;
+    const config = {
+      servers: Array.isArray(parsed?.servers) ? parsed.servers : [],
+      remoteServers: Array.isArray(parsed?.remoteServers) ? parsed.remoteServers : [],
+      port:
+        typeof parsed?.port === "number" && validatePort(parsed.port).valid
+          ? parsed.port
+          : legacyPort,
+    };
+    if (!parsed) writePrivateJsonFile(this.paths.configPath, config);
+    return config;
   }
 
   private loadToolFilters(): ToolFilters {
-    try {
-      if (fs.existsSync(this.paths.toolFiltersPath)) {
-        protectExistingPrivateFile(this.paths.toolFiltersPath);
-        const data = fs.readFileSync(this.paths.toolFiltersPath, "utf8");
-        return JSON.parse(data) as ToolFilters;
-      }
-    } catch (error) {
-      log.debug("Failed to load tool filters:", error);
-    }
-    return {};
+    return readPrivateJsonFile<ToolFilters>(this.paths.toolFiltersPath) ?? {};
   }
 
   private loadSelectionState(): SelectionState {
-    try {
-      if (fs.existsSync(this.paths.selectionStatePath)) {
-        protectExistingPrivateFile(this.paths.selectionStatePath);
-        const data = fs.readFileSync(this.paths.selectionStatePath, "utf8");
-        return JSON.parse(data) as SelectionState;
+    return (
+      readPrivateJsonFile<SelectionState>(this.paths.selectionStatePath) ?? {
+        local: [],
+        remote: [],
       }
-    } catch (error) {
-      log.debug("Failed to load selection state:", error);
-    }
-    return { local: [], remote: [] };
+    );
   }
 }

@@ -74,6 +74,10 @@ mcpsm import ./my-servers.json
 
 ---
 
+### Partial failures
+
+Result counts include only successful additions, updates, and merges. Rejected operations are listed by server ID, remaining servers are still processed, and the command returns a nonzero exit status. Successful imports remain saved; the batch is not rolled back.
+
 ## export
 
 Export servers to stdout or file.

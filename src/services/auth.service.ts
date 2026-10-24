@@ -1,3 +1,4 @@
+import { prepareAuthorizationCodeRequest } from "@modelcontextprotocol/sdk/client/auth.js";
 /**
  * OAuth Authentication service for MCP servers
  * Implements OAuth 2.1 with PKCE following the MCP specification
@@ -35,6 +36,7 @@ import {
   protectExistingPrivateFile,
   writePrivateFile,
   writePrivateJsonFile,
+  readPrivateJsonFile,
 } from "../shared/secure-storage.js";
 
 const log = createLogger("AuthService");
@@ -53,7 +55,7 @@ const PENDING_AUTH_FILE = "pending-auth.json";
 const AUTH_TIMEOUT_MS = 5 * 60 * 1000;
 
 /** Token refresh threshold (refresh 5 minutes before expiry) */
-const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
+export const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
 
 /** MCP Client information for registration */
 const MCP_CLIENT_INFO = {
@@ -77,6 +79,7 @@ export class AuthService {
   private tokens: Map<string, StoredOAuthTokens>;
   private pendingAuths: Map<string, PendingAuthorization>;
   private callbackServer: HttpServer | null = null;
+  private startingOAuthFlows = 0;
   private callbackPort: number | null = null;
 
   /** Per-server refresh mutex to prevent concurrent refresh requests */
@@ -145,19 +148,8 @@ export class AuthService {
 
   /** Load stored tokens from disk */
   private loadTokens(): void {
-    try {
-      if (fs.existsSync(this.tokensPath)) {
-        protectExistingPrivateFile(this.tokensPath);
-        const data = fs.readFileSync(this.tokensPath, "utf8");
-        const parsed = JSON.parse(data) as Record<string, StoredOAuthTokens>;
-        this.tokens = new Map(Object.entries(parsed));
-      } else {
-        this.tokens.clear();
-      }
-    } catch (error) {
-      log.debug("Failed to load OAuth tokens:", error);
-      this.tokens = new Map();
-    }
+    const parsed = readPrivateJsonFile<Record<string, StoredOAuthTokens>>(this.tokensPath);
+    this.tokens = new Map(Object.entries(parsed ?? {}));
   }
 
   private saveTokens(
@@ -166,9 +158,7 @@ export class AuthService {
     expectedTokens?: StoredOAuthTokens | null
   ): boolean {
     const latestTokens = new Map<string, StoredOAuthTokens>(
-      fs.existsSync(this.tokensPath)
-        ? Object.entries(JSON.parse(fs.readFileSync(this.tokensPath, "utf8")))
-        : []
+      Object.entries(readPrivateJsonFile<Record<string, StoredOAuthTokens>>(this.tokensPath) ?? {})
     );
     if (
       expectedTokens !== undefined &&
@@ -187,13 +177,7 @@ export class AuthService {
       latestTokens.delete(serverId);
     }
 
-    const tempPath = `${this.tokensPath}.${crypto.randomUUID()}.tmp`;
-    try {
-      writePrivateJsonFile(tempPath, Object.fromEntries(latestTokens));
-      fs.renameSync(tempPath, this.tokensPath);
-    } finally {
-      fs.rmSync(tempPath, { force: true });
-    }
+    writePrivateJsonFile(this.tokensPath, Object.fromEntries(latestTokens));
     this.tokens = latestTokens;
     log.debug(
       `OAuth credentials ${tokens ? "saved" : "removed"} for ${serverId} (pid=${process.pid}, expiresAt=${tokens?.expiresAt ?? "none"})`
@@ -203,34 +187,16 @@ export class AuthService {
 
   /** Load pending authorizations from disk */
   private loadPendingAuths(): void {
-    try {
-      if (fs.existsSync(this.pendingAuthPath)) {
-        protectExistingPrivateFile(this.pendingAuthPath);
-        const data = fs.readFileSync(this.pendingAuthPath, "utf8");
-        const parsed = JSON.parse(data) as Record<string, PendingAuthorization>;
-
-        // Clean up expired pending auths
-        const now = Date.now();
-        for (const [key, auth] of Object.entries(parsed)) {
-          if (now - auth.createdAt < AUTH_TIMEOUT_MS) {
-            this.pendingAuths.set(key, auth);
-          }
-        }
-      }
-    } catch (error) {
-      log.debug("Failed to load pending authorizations:", error);
-      this.pendingAuths = new Map();
-    }
+    const parsed = readPrivateJsonFile<Record<string, PendingAuthorization>>(this.pendingAuthPath);
+    const now = Date.now();
+    this.pendingAuths = new Map(
+      Object.entries(parsed ?? {}).filter(([, auth]) => now - auth.createdAt < AUTH_TIMEOUT_MS)
+    );
   }
 
-  /** Save pending authorizations to disk */
   private savePendingAuths(): void {
-    try {
-      const data = Object.fromEntries(this.pendingAuths);
-      writePrivateJsonFile(this.pendingAuthPath, data);
-    } catch (error) {
-      log.debug("Failed to save pending authorizations:", error);
-    }
+    readPrivateJsonFile<Record<string, PendingAuthorization>>(this.pendingAuthPath);
+    writePrivateJsonFile(this.pendingAuthPath, Object.fromEntries(this.pendingAuths));
   }
 
   // === PKCE Implementation ===
@@ -530,6 +496,12 @@ export class AuthService {
     });
   }
 
+  releaseOAuthFlow(state?: string): void {
+    this.loadPendingAuths();
+    if (state && this.pendingAuths.delete(state)) this.savePendingAuths();
+    if (this.pendingAuths.size === 0 && this.startingOAuthFlows === 0) this.stopCallbackServer();
+  }
+
   /** Stop the callback server */
   stopCallbackServer(): void {
     if (this.callbackServer) {
@@ -620,13 +592,12 @@ export class AuthService {
 
     try {
       // Exchange authorization code for tokens
-      const tokenParams = new URLSearchParams({
-        grant_type: "authorization_code",
+      const tokenParams = prepareAuthorizationCodeRequest(
         code,
-        redirect_uri: pendingAuth.redirectUri,
-        client_id: pendingAuth.clientId,
-        code_verifier: pendingAuth.pkce.codeVerifier,
-      });
+        pendingAuth.pkce.codeVerifier,
+        pendingAuth.redirectUri
+      );
+      tokenParams.set("client_id", pendingAuth.clientId);
 
       if (pendingAuth.clientSecret) {
         tokenParams.set("client_secret", pendingAuth.clientSecret);
@@ -750,6 +721,8 @@ export class AuthService {
     server: RemoteServer,
     authRequirements?: ServerAuthRequirements
   ): Promise<{ authUrl: string; state: string } | null> {
+    this.startingOAuthFlows++;
+    let completed = false;
     try {
       // Discover authorization server
       const discovery = await this.discoverAuthServer(server, authRequirements);
@@ -798,10 +771,16 @@ export class AuthService {
         scopes
       );
 
+      completed = true;
       return { authUrl: url, state };
     } catch (error) {
       log.debug("Error starting OAuth flow:", error);
       return null;
+    } finally {
+      this.startingOAuthFlows--;
+      if (!completed && this.pendingAuths.size === 0 && this.startingOAuthFlows === 0) {
+        this.stopCallbackServer();
+      }
     }
   }
 
@@ -1314,8 +1293,16 @@ export class AuthService {
 
   /** Reload tokens and pending auths from disk (used by daemon refresh) */
   reload(): void {
-    this.loadTokens();
-    this.loadPendingAuths();
+    const tokens = this.tokens;
+    const pendingAuths = this.pendingAuths;
+    try {
+      this.loadTokens();
+      this.loadPendingAuths();
+    } catch (error) {
+      this.tokens = tokens;
+      this.pendingAuths = pendingAuths;
+      throw error;
+    }
   }
 
   /** Get storage paths for watchers/diagnostics */

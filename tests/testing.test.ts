@@ -5,6 +5,25 @@ import os from "os";
 import { TestingService, resetTestingService } from "../src/services/testing.service.js";
 import { ConfigService, resetConfigService } from "../src/services/config.service.js";
 
+function mockMcpFetch(names: string[]): ReturnType<typeof vi.fn<typeof fetch>> {
+  return vi.fn(async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    if (init?.method !== "POST") return new globalThis.Response(null, { status: 405 });
+    const request = JSON.parse(String(init.body));
+    if (!("id" in request)) return new globalThis.Response(null, { status: 202 });
+    const result =
+      request.method === "initialize"
+        ? {
+            protocolVersion: "2025-11-25",
+            capabilities: { tools: {} },
+            serverInfo: { name: "fixture", version: "1" },
+          }
+        : { tools: names.map((name) => ({ name, inputSchema: { type: "object" } })) };
+    return new globalThis.Response(JSON.stringify({ jsonrpc: "2.0", id: request.id, result }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+}
+
 // Test directory setup
 const testConfigDir = path.join(os.tmpdir(), "mcpsm-testing-test-" + Date.now());
 
@@ -153,24 +172,7 @@ describe("TestingService", () => {
     });
 
     it("should send custom headers with remote HTTP server requests", async () => {
-      const mockFetch = vi.fn();
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: new globalThis.Headers(),
-          json: async () => ({ result: {} }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: new globalThis.Headers({ "content-type": "application/json" }),
-          json: async () => ({
-            result: {
-              tools: [{ name: "ask_question", description: "Ask Devin a question" }],
-            },
-          }),
-        });
+      const mockFetch = mockMcpFetch(["ask_question"]);
 
       const originalFetch = globalThis.fetch;
       globalThis.fetch = mockFetch;
@@ -190,15 +192,11 @@ describe("TestingService", () => {
         const result = await testingService.testRemoteServer(server);
 
         expect(result.success).toBe(true);
-        expect(mockFetch).toHaveBeenCalledTimes(2);
-        expect(mockFetch.mock.calls[0][1].headers).toMatchObject({
-          Authorization: "Bearer devin-token",
-          "X-Org-Id": "org_JVU8h2dxO575yI66",
-        });
-        expect(mockFetch.mock.calls[1][1].headers).toMatchObject({
-          Authorization: "Bearer devin-token",
-          "X-Org-Id": "org_JVU8h2dxO575yI66",
-        });
+        for (const [, init] of mockFetch.mock.calls) {
+          const headers = new globalThis.Headers(init?.headers);
+          expect(headers.get("Authorization")).toBe("Bearer devin-token");
+          expect(headers.get("X-Org-Id")).toBe("org_JVU8h2dxO575yI66");
+        }
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -247,28 +245,7 @@ describe("TestingService", () => {
       testingService = new TestingService();
 
       // Mock fetch to return a successful response with tools
-      const mockFetch = vi.fn();
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: new globalThis.Headers(),
-          json: async () => ({ result: {} }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: new globalThis.Headers({ "content-type": "application/json" }),
-          json: async () => ({
-            result: {
-              tools: [
-                { name: "tool1", description: "Tool 1" },
-                { name: "tool2", description: "Tool 2" },
-                { name: "tool3", description: "Tool 3" },
-              ],
-            },
-          }),
-        });
+      const mockFetch = mockMcpFetch(["tool1", "tool2", "tool3"]);
 
       const originalFetch = globalThis.fetch;
       globalThis.fetch = mockFetch;
@@ -318,27 +295,7 @@ describe("TestingService", () => {
       testingService = new TestingService();
 
       // Mock fetch - server now only has tool1 and tool2 (old-tool was removed)
-      const mockFetch = vi.fn();
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: new globalThis.Headers(),
-          json: async () => ({ result: {} }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: new globalThis.Headers({ "content-type": "application/json" }),
-          json: async () => ({
-            result: {
-              tools: [
-                { name: "tool1", description: "Tool 1" },
-                { name: "tool2", description: "Tool 2" },
-              ],
-            },
-          }),
-        });
+      const mockFetch = mockMcpFetch(["tool1", "tool2"]);
 
       const originalFetch = globalThis.fetch;
       globalThis.fetch = mockFetch;

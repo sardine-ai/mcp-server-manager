@@ -5,13 +5,10 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { RemoteServer, StoredOAuthTokens } from "../types/index.js";
-import AuthService from "./auth.service.js";
+import AuthService, { TOKEN_REFRESH_THRESHOLD_MS } from "./auth.service.js";
 import { createLogger } from "../shared/logger.js";
 
 const log = createLogger("TransportAuthProvider");
-
-/** Refresh 5 minutes before expiry (matches AuthService) */
-const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
 
 /** Default redirect URI placeholder (only used if a fresh login is required) */
 const DEFAULT_REDIRECT_URL = new URL("http://127.0.0.1:8400/callback");

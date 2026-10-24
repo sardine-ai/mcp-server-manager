@@ -1,3 +1,4 @@
+import { createMcpConnection, closeMcpConnection } from "./mcp-connection.js";
 /**
  * Gateway Service - MCP multiplexing gateway
  *
@@ -26,10 +27,7 @@ import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { getConfigService } from "./config.service.js";
 import { getAuthService } from "./auth.service.js";
-import { getEnvironmentService } from "./environment.service.js";
 import { getProfileService } from "./profile.service.js";
-import { createTransportAuthProvider } from "./oauth-transport.provider.js";
-import path from "node:path";
 import { createLogger } from "../shared/logger.js";
 import { VERSION } from "../shared/version.js";
 import type { LocalServer, RemoteServer } from "../types/index.js";
@@ -185,32 +183,13 @@ async function reconnectServer(serverId: string): Promise<void> {
  */
 async function connectLocalServer(server: LocalServer): Promise<ConnectedServer | null> {
   const configService = getConfigService();
-  const envService = getEnvironmentService();
 
+  let connection: ReturnType<typeof createMcpConnection> | undefined;
   try {
     logger.info(`Connecting to local server: ${server.name}`);
 
-    // Use shell wrapping to ensure PATH resolution
-    // This ensures commands like npx, uvx are found even with limited PATH
-    const shellCommand = envService.getShellCommand();
-    const fullCommand =
-      server.args && server.args.length > 0
-        ? `${server.command} ${server.args.join(" ")}`
-        : server.command;
-
-    // Prepend the current Node's bin dir inside the command so it takes
-    // effect after the login shell finishes sourcing profile scripts.
-    // This ensures npx/node resolve to the same version that started mcpsm.
-    const nodeBinDir = path.dirname(process.execPath);
-    const wrappedCommand = `export PATH="${nodeBinDir}:$PATH" && ${fullCommand}`;
-
-    const transport = new StdioClientTransport({
-      command: shellCommand, // e.g., "/bin/zsh" or "/bin/bash"
-      args: ["-l", "-c", wrappedCommand], // -l = login shell (loads full PATH)
-      env: { ...process.env, ...(server.env || {}) } as Record<string, string>,
-    });
-
-    const client = new Client({ name: "mcpsm-gateway", version: VERSION }, { capabilities: {} });
+    connection = createMcpConnection(server, "gateway");
+    const { client, transport } = connection;
 
     await client.connect(transport);
 
@@ -237,6 +216,7 @@ async function connectLocalServer(server: LocalServer): Promise<ConnectedServer 
       tools: enabledTools,
     };
   } catch (error) {
+    if (connection) await closeMcpConnection(connection).catch(() => undefined);
     logger.error(`Failed to connect to local server ${server.name}:`, error);
     return null;
   }
@@ -247,42 +227,13 @@ async function connectLocalServer(server: LocalServer): Promise<ConnectedServer 
  */
 async function connectRemoteServer(server: RemoteServer): Promise<ConnectedServer | null> {
   const configService = getConfigService();
-  const authService = getAuthService();
 
+  let connection: ReturnType<typeof createMcpConnection> | undefined;
   try {
     logger.info(`Connecting to remote server: ${server.name} (${server.type})`);
 
-    const url = new URL(server.url);
-    const headers: Record<string, string> = { ...(server.headers || {}) };
-    const transportOptions: {
-      requestInit?: { headers: Record<string, string> };
-      authProvider?: ReturnType<typeof createTransportAuthProvider>;
-    } = {};
-
-    // Check for static bearer token first
-    if (server.bearerToken) {
-      headers["Authorization"] = `Bearer ${server.bearerToken}`;
-    } else if (server.oauth?.enabled) {
-      // Use SDK auth provider to auto-refresh OAuth tokens
-      transportOptions.authProvider = createTransportAuthProvider(server, authService);
-      logger.debug(`Using OAuth provider for ${server.name}`);
-    }
-
-    if (Object.keys(headers).length > 0) {
-      transportOptions.requestInit = { headers };
-    }
-
-    // Create appropriate transport based on server type
-    let transport: RemoteTransport;
-
-    if (server.type === "sse") {
-      transport = new SSEClientTransport(url, transportOptions);
-    } else {
-      // HTTP type uses StreamableHTTP
-      transport = new StreamableHTTPClientTransport(url, transportOptions);
-    }
-
-    const client = new Client({ name: "mcpsm-gateway", version: VERSION }, { capabilities: {} });
+    connection = createMcpConnection(server, "gateway");
+    const { client, transport } = connection;
 
     await client.connect(transport);
 
@@ -310,6 +261,7 @@ async function connectRemoteServer(server: RemoteServer): Promise<ConnectedServe
       tools: enabledTools,
     };
   } catch (error) {
+    if (connection) await closeMcpConnection(connection).catch(() => undefined);
     logger.error(`Failed to connect to remote server ${server.name}:`, error);
     return null;
   }
@@ -820,15 +772,17 @@ export async function refreshGateway(
     const configuredPort = configService.getPort();
     if (configuredPort !== gatewayState.port && gatewayState.httpServer) {
       logger.info(`Port changed (${gatewayState.port} -> ${configuredPort}), re-binding server`);
-      await new Promise<void>((resolve, reject) => {
-        gatewayState.httpServer?.close((err) => {
-          if (err) {
-            reject(err);
-          } else {
+      if (gatewayState.httpServer.listening) {
+        await new Promise<void>((resolve, reject) => {
+          gatewayState.httpServer?.close((err) => {
+            if (err) {
+              reject(err);
+              return;
+            }
             resolve();
-          }
+          });
         });
-      });
+      }
 
       await new Promise<void>((resolve, reject) => {
         const server = gatewayState.httpServer;

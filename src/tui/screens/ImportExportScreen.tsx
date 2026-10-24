@@ -162,13 +162,16 @@ export function ImportExportScreen({ onBack }: ImportExportScreenProps): React.R
     if (mergeResult.updated > 0) details.push(`Updated: ${mergeResult.updated}`);
     if (mergeResult.merged && mergeResult.merged > 0) details.push(`Merged: ${mergeResult.merged}`);
     if (mergeResult.skipped > 0) details.push(`Skipped: ${mergeResult.skipped}`);
+    for (const failure of mergeResult.errors || []) {
+      details.push(failure.serverId + ": " + failure.error);
+    }
 
     setState((prev) => ({
       ...prev,
       view: "result",
       result: {
-        success: true,
-        message: "Import completed",
+        success: !mergeResult.errors?.length,
+        message: mergeResult.errors?.length ? "Import completed with errors" : "Import completed",
         details,
       },
       menuOptions: buildMenuOptions(),

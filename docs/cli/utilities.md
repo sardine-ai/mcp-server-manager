@@ -134,6 +134,19 @@ mcpsm config --dir
 
 ---
 
+## port
+
+Read or change the gateway port:
+
+```bash
+mcpsm port
+mcpsm port 9000
+```
+
+This uses the same value and update workflow as `mcpsm settings set port 9000`. Existing client gateways are updated and a running daemon is refreshed. Partial failures report the saved port and return a nonzero exit status. See [Settings](./settings.md#port).
+
+---
+
 ## version
 
 Show version information.

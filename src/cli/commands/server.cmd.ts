@@ -293,65 +293,29 @@ export function registerServerCommands(program: Command): void {
           process.stdout.write(`  Testing ${colors.cyan}${name}${colors.reset}... `);
           const testingService = getTestingService();
 
-          // First quick test without auth
-          let testResult = await testingService.testRemoteServer(server, true);
-
-          if (testResult.success) {
-            console.log(`${c.checkmark} OK (${testResult.toolCount} tools)`);
-          } else if (testResult.requiresAuth) {
-            // Server requires authentication - offer to authenticate
-            console.log(`${colors.yellow}requires authentication${colors.reset}`);
-
-            // Auto-enable OAuth if not enabled
-            if (!server.oauth?.enabled) {
-              configService.updateRemoteServer(serverId, { oauth: { enabled: true } });
-              server.oauth = { enabled: true };
-              console.log(`  ${colors.gray}OAuth auto-enabled for this server${colors.reset}`);
-            }
-
-            // Import open for browser
-            const open = (await import("open")).default;
-            const authService = getAuthService();
-
-            // Start OAuth flow
-            const flow = await authService.startOAuthFlow(server, testResult.authRequirements);
-            if (flow) {
-              console.log(`\n  ${colors.cyan}Opening browser for authentication...${colors.reset}`);
+          const testResult = await testingService.testAndAuthenticate(
+            server,
+            async (url) => {
+              console.log("\\nOpening browser for authentication...");
+              const open = (await import("open")).default;
               try {
-                await open(flow.authUrl);
+                await open(url);
               } catch {
-                console.log(
-                  `  ${colors.yellow}Could not open browser automatically.${colors.reset}`
-                );
-                console.log(`  Please open: ${colors.blue}${flow.authUrl}${colors.reset}`);
+                console.log("Please open: " + url);
               }
-
-              console.log(`  ${colors.yellow}Waiting for authentication...${colors.reset}`);
-
-              // Wait for auth
-              const authResult = await authService.waitForAuth(flow.state);
-              authService.stopCallbackServer();
-
-              if (authResult.success) {
-                console.log(`  ${c.checkmark} Authenticated successfully`);
-
-                // Re-test
-                process.stdout.write(`  Re-testing... `);
-                testResult = await testingService.testRemoteServer(server);
-                if (testResult.success) {
-                  console.log(`${c.checkmark} OK (${testResult.toolCount} tools)`);
-                } else {
-                  console.log(`${c.cross} FAILED - ${testResult.error}`);
-                }
-              } else {
-                console.log(`  ${c.cross} Authentication failed: ${authResult.error}`);
-              }
-            } else {
-              console.log(`  ${c.cross} Could not start OAuth flow`);
-              console.log(`  ${colors.gray}Server may not support OAuth discovery${colors.reset}`);
+            },
+            {
+              onPhase: (phase) => {
+                if (phase === "authorization-required") console.log("Requires authentication");
+                if (phase === "waiting") console.log("Waiting for authentication...");
+                if (phase === "retesting") process.stdout.write("Re-testing... ");
+              },
             }
+          );
+          if (testResult.success) {
+            console.log("OK (" + testResult.toolCount + " tools)");
           } else {
-            console.log(`${c.cross} FAILED - ${testResult.error}`);
+            console.log("FAILED - " + testResult.error);
           }
         } else if (server.oauth?.enabled) {
           console.log(

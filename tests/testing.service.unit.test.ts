@@ -1,13 +1,16 @@
-/* global ReadableStream, Response, TextEncoder */
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EventEmitter } from "events";
-import type { LocalServer, RemoteServer, Server, ToolFilters } from "../src/types/index.js";
+import type {
+  LocalServer,
+  RemoteServer,
+  Server,
+  ToolFilters,
+  ServerToolFilter,
+} from "../src/types/index.js";
 
 const configMocks = vi.hoisted(() => ({
-  localServers: [] as any[],
-  remoteServers: [] as any[],
-  toolFilters: {} as Record<string, any>,
+  localServers: [] as LocalServer[],
+  remoteServers: [] as RemoteServer[],
+  toolFilters: {} as ToolFilters,
   service: {
     getServerToolFilter: vi.fn(),
     setServerToolFilter: vi.fn(),
@@ -17,7 +20,6 @@ const configMocks = vi.hoisted(() => ({
     getRemoteServers: vi.fn(),
   },
 }));
-
 const authMocks = vi.hoisted(() => ({
   service: {
     getValidToken: vi.fn(),
@@ -25,71 +27,27 @@ const authMocks = vi.hoisted(() => ({
     startOAuthFlow: vi.fn(),
     waitForAuth: vi.fn(),
     stopCallbackServer: vi.fn(),
+    releaseOAuthFlow: vi.fn(),
     hasValidToken: vi.fn(),
     getPendingAuthState: vi.fn(),
   },
 }));
-
-const envMocks = vi.hoisted(() => ({
-  service: {
-    getShellCommand: vi.fn(),
-    shouldUseZsh: vi.fn(),
-  },
+const connectionMocks = vi.hoisted(() => ({
+  connect: vi.fn(),
+  listTools: vi.fn(),
+  close: vi.fn(),
+  create: vi.fn(),
 }));
-
-const childProcessMocks = vi.hoisted(() => ({
-  spawn: vi.fn(),
-}));
-
-const sdkMocks = vi.hoisted(() => {
-  const clientInstances: any[] = [];
-  const transportInstances: any[] = [];
-  const Client = vi.fn(function () {
-    const instance = {
-      connect: vi.fn(),
-      listTools: vi.fn(),
-      close: vi.fn(),
-    };
-    clientInstances.push(instance);
-    return instance;
-  });
-  const SSEClientTransport = vi.fn(function (url: URL, options: unknown) {
-    const instance = { url, options };
-    transportInstances.push(instance);
-    return instance;
-  });
-  return {
-    Client,
-    SSEClientTransport,
-    clientInstances,
-    transportInstances,
-  };
-});
-
 vi.mock("../src/services/config.service.js", () => ({
   getConfigService: (): typeof configMocks.service => configMocks.service,
 }));
-
 vi.mock("../src/services/auth.service.js", () => ({
   getAuthService: (): typeof authMocks.service => authMocks.service,
 }));
-
-vi.mock("../src/services/environment.service.js", () => ({
-  getEnvironmentService: (): typeof envMocks.service => envMocks.service,
+vi.mock("../src/services/mcp-connection.js", () => ({
+  createMcpConnection: connectionMocks.create,
+  closeMcpConnection: connectionMocks.close,
 }));
-
-vi.mock("child_process", () => ({
-  spawn: childProcessMocks.spawn,
-}));
-
-vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
-  Client: sdkMocks.Client,
-}));
-
-vi.mock("@modelcontextprotocol/sdk/client/sse.js", () => ({
-  SSEClientTransport: sdkMocks.SSEClientTransport,
-}));
-
 import {
   getTestingService,
   resetTestingService,
@@ -97,15 +55,8 @@ import {
 } from "../src/services/testing.service.js";
 
 function localServer(overrides: Partial<LocalServer> = {}): LocalServer {
-  return {
-    id: "local",
-    name: "Local",
-    command: "node",
-    args: ["server.js"],
-    ...overrides,
-  };
+  return { id: "local", name: "Local", command: "node", args: ["server.js"], ...overrides };
 }
-
 function remoteServer(overrides: Partial<RemoteServer> = {}): RemoteServer {
   return {
     id: "remote",
@@ -116,518 +67,152 @@ function remoteServer(overrides: Partial<RemoteServer> = {}): RemoteServer {
   };
 }
 
-function jsonResponse(
-  body: unknown,
-  init: { status?: number; headers?: Record<string, string> } = {}
-): Response {
-  return new Response(JSON.stringify(body), {
-    status: init.status ?? 200,
-    headers: {
-      "content-type": "application/json",
-      ...(init.headers ?? {}),
-    },
-  });
-}
-
-function sseResponse(chunks: string[], status = 200): Response {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller): void {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(chunk));
-      }
-      controller.close();
-    },
-  });
-
-  return new Response(stream, {
-    status,
-    headers: {
-      "content-type": "text/event-stream",
-    },
-  });
-}
-
-function createProcess(): EventEmitter & {
-  stdout: EventEmitter;
-  stdin: { write: ReturnType<typeof vi.fn> };
-  kill: ReturnType<typeof vi.fn>;
-} {
-  const process = new EventEmitter() as EventEmitter & {
-    stdout: EventEmitter;
-    stdin: { write: ReturnType<typeof vi.fn> };
-    kill: ReturnType<typeof vi.fn>;
-  };
-  process.stdout = new EventEmitter();
-  process.stdin = { write: vi.fn() };
-  process.kill = vi.fn();
-  return process;
-}
-
-function resetMocks(): void {
-  configMocks.localServers = [];
-  configMocks.remoteServers = [];
-  configMocks.toolFilters = {};
-  configMocks.service.getServerToolFilter.mockImplementation(
-    (filterId: string) => configMocks.toolFilters[filterId]
-  );
-  configMocks.service.setServerToolFilter.mockImplementation((filterId: string, filter: any) => {
-    configMocks.toolFilters[filterId] = filter;
-  });
-  configMocks.service.updateRemoteServer.mockImplementation(
-    (serverId: string, patch: Partial<RemoteServer>) => {
-      configMocks.remoteServers = configMocks.remoteServers.map((server) =>
-        server.id === serverId ? { ...server, ...patch } : server
-      );
-    }
-  );
-  configMocks.service.getToolFilters.mockImplementation(() => configMocks.toolFilters);
-  configMocks.service.getLocalServers.mockImplementation(() => configMocks.localServers);
-  configMocks.service.getRemoteServers.mockImplementation(() => configMocks.remoteServers);
-
-  authMocks.service.getValidToken.mockResolvedValue(undefined);
-  authMocks.service.parseWWWAuthenticate.mockReturnValue({
-    requiresAuth: true,
-    resourceMetadataUrl: "https://auth.test/.well-known/oauth-protected-resource",
-  });
-  authMocks.service.startOAuthFlow.mockResolvedValue({
-    authUrl: "https://auth.test/authorize",
-    state: "state",
-  });
-  authMocks.service.waitForAuth.mockResolvedValue({ success: true });
-  authMocks.service.stopCallbackServer.mockImplementation(() => undefined);
-  authMocks.service.hasValidToken.mockReturnValue(false);
-  authMocks.service.getPendingAuthState.mockReturnValue("state");
-
-  envMocks.service.getShellCommand.mockReturnValue("/bin/zsh");
-  envMocks.service.shouldUseZsh.mockReturnValue(false);
-
-  childProcessMocks.spawn.mockReset();
-  sdkMocks.Client.mockClear();
-  sdkMocks.SSEClientTransport.mockClear();
-  sdkMocks.clientInstances.length = 0;
-  sdkMocks.transportInstances.length = 0;
-}
-
 describe("TestingService unit coverage", () => {
   let service: TestingService;
-  const originalFetch = globalThis.fetch;
-
   beforeEach(() => {
-    vi.clearAllMocks();
-    resetMocks();
+    vi.restoreAllMocks();
+    vi.resetAllMocks();
+    configMocks.localServers = [];
+    configMocks.remoteServers = [];
+    configMocks.toolFilters = {};
+    configMocks.service.getServerToolFilter.mockImplementation(
+      (id: string) => configMocks.toolFilters[id]
+    );
+    configMocks.service.setServerToolFilter.mockImplementation(
+      (id: string, filter: ServerToolFilter) => {
+        configMocks.toolFilters[id] = filter;
+      }
+    );
+    configMocks.service.getToolFilters.mockImplementation(() => configMocks.toolFilters);
+    configMocks.service.getLocalServers.mockImplementation(() => configMocks.localServers);
+    configMocks.service.getRemoteServers.mockImplementation(() => configMocks.remoteServers);
+    configMocks.service.updateRemoteServer.mockReturnValue({ success: true });
+    authMocks.service.getValidToken.mockResolvedValue(undefined);
+    authMocks.service.startOAuthFlow.mockResolvedValue({
+      authUrl: "https://auth.test/authorize",
+      state: "state",
+    });
+    authMocks.service.waitForAuth.mockResolvedValue({ success: true });
+    authMocks.service.getPendingAuthState.mockReturnValue("state");
+    connectionMocks.connect.mockResolvedValue(undefined);
+    connectionMocks.listTools.mockResolvedValue({ tools: [] });
+    connectionMocks.close.mockResolvedValue(undefined);
+    connectionMocks.create.mockReturnValue({
+      client: { connect: connectionMocks.connect, listTools: connectionMocks.listTools },
+      transport: {},
+    });
     resetTestingService();
     service = new TestingService();
   });
-
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    vi.useRealTimers();
     resetTestingService();
   });
 
   it("stores tool annotations from discovered tools", async () => {
-    const process = createProcess();
-    childProcessMocks.spawn.mockReturnValue(process);
-
-    const resultPromise = service.testLocalServer(localServer());
-    process.stdout.emit(
-      "data",
-      Buffer.from(
-        `${JSON.stringify({
-          result: {
-            tools: [{ name: "search", annotations: { readOnlyHint: true } }, { name: "plain" }],
-          },
-        })}\n`
-      )
-    );
-
-    await resultPromise;
+    connectionMocks.listTools.mockResolvedValue({
+      tools: [{ name: "search", annotations: { readOnlyHint: true } }, { name: "plain" }],
+    });
+    await service.testLocalServer(localServer());
     expect(configMocks.toolFilters.local.toolsData.search.annotations).toEqual({
       readOnlyHint: true,
     });
     expect(configMocks.toolFilters.local.toolsData.plain.annotations).toBeUndefined();
   });
 
-  it("tests a local server through direct spawn and records discovered tools", async () => {
-    const process = createProcess();
-    childProcessMocks.spawn.mockReturnValue(process);
-
-    const resultPromise = service.testLocalServer(localServer());
-    process.stdout.emit(
-      "data",
-      Buffer.from(
-        `${JSON.stringify({
-          result: {
-            tools: [{ name: "search", description: "Search docs" }],
-          },
-        })}\n`
-      )
-    );
-
-    await expect(resultPromise).resolves.toEqual({ success: true, toolCount: 1 });
-    expect(childProcessMocks.spawn).toHaveBeenCalledWith("node", ["server.js"], {
-      env: expect.any(Object),
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    expect(configMocks.toolFilters.local.allTools).toEqual(["search"]);
-    expect(configMocks.toolFilters.local.toolsData.search.tokens).toBeGreaterThan(0);
-  });
-
-  it("uses zsh for local shell-style commands when available", async () => {
-    envMocks.service.shouldUseZsh.mockReturnValue(true);
-    const process = createProcess();
-    childProcessMocks.spawn.mockReturnValue(process);
-
-    const resultPromise = service.testLocalServer(
-      localServer({
-        command: "/usr/local/bin/start-server",
-        args: ["--stdio"],
-        env: { API_KEY: "secret" },
-      })
-    );
-    process.emit("close", 7);
-
-    await expect(resultPromise).resolves.toEqual({
+  it.each(["local", "http", "sse"])(
+    "discovers %s tools and preserves disabled tools",
+    async (type) => {
+      connectionMocks.listTools.mockResolvedValue({
+        tools: [{ name: "search", description: "Search docs" }],
+      });
+      const id = type === "local" ? "local" : "remote:remote";
+      configMocks.toolFilters[id] = {
+        enabled: [],
+        disabledTools: ["search"],
+        allTools: ["search"],
+      };
+      const result =
+        type === "local"
+          ? await service.testLocalServer(localServer())
+          : await service.testRemoteServer(remoteServer({ type: type === "sse" ? "sse" : "http" }));
+      expect(result).toEqual({ success: true, toolCount: 1 });
+      expect(configMocks.toolFilters[id]).toMatchObject({
+        allTools: ["search"],
+        disabledTools: ["search"],
+      });
+      expect(connectionMocks.close).toHaveBeenCalledOnce();
+    }
+  );
+  it.each(["connect", "listTools"] as const)("closes after %s fails", async (method) => {
+    connectionMocks[method].mockRejectedValue(new Error("broken"));
+    await expect(service.testLocalServer(localServer())).resolves.toMatchObject({
       success: false,
-      error: "Exited with code 7",
-      toolCount: 0,
+      error: "broken",
     });
-    expect(childProcessMocks.spawn).toHaveBeenCalledWith(
-      "/bin/zsh",
-      ["-c", "/usr/local/bin/start-server --stdio"],
-      {
-        env: expect.objectContaining({ API_KEY: "secret" }),
-        stdio: ["pipe", "pipe", "pipe"],
-      }
-    );
+    expect(connectionMocks.close).toHaveBeenCalledOnce();
   });
-
-  it("records spawn errors for local servers", async () => {
-    const process = createProcess();
-    childProcessMocks.spawn.mockReturnValue(process);
-
-    const resultPromise = service.testLocalServer(localServer());
-    process.emit("error", new Error("spawn failed"));
-
-    await expect(resultPromise).resolves.toEqual({
-      success: false,
-      error: "spawn failed",
-      toolCount: 0,
-    });
-    expect(configMocks.toolFilters.local.error).toBe("spawn failed");
+  it("keeps an end-to-end deadline and closes a stalled connection", async () => {
+    vi.useFakeTimers();
+    connectionMocks.connect.mockImplementation(() => new Promise(() => {}));
+    const pending = service.testLocalServer(localServer());
+    await vi.advanceTimersByTimeAsync(8000);
+    await expect(pending).resolves.toMatchObject({ success: false, error: "Timeout" });
+    expect(connectionMocks.close).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
   });
-
-  it("tests remote HTTP servers with auth headers, session IDs, and JSON tools", async () => {
-    const fetchMock = vi.fn();
-    globalThis.fetch = fetchMock;
-    authMocks.service.getValidToken.mockResolvedValue("oauth-token");
-    fetchMock
-      .mockResolvedValueOnce(
-        jsonResponse(
-          { result: {} },
-          {
-            headers: {
-              "mcp-session-id": "session-1",
-            },
-          }
-        )
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          result: {
-            tools: [{ name: "fetch", description: "Fetch URL" }],
-          },
-        })
-      );
-
-    const result = await service.testRemoteServer(
-      remoteServer({
-        oauth: { enabled: true },
-        headers: { "X-Custom": "value" },
-      })
-    );
-
-    expect(result).toEqual({ success: true, toolCount: 1 });
-    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
-      "X-Custom": "value",
-      Authorization: "Bearer oauth-token",
-    });
-    expect(fetchMock.mock.calls[1][1].headers).toMatchObject({
-      "mcp-session-id": "session-1",
-    });
-    expect(configMocks.toolFilters["remote:remote"].allTools).toEqual(["fetch"]);
-  });
-
-  it("prefers static bearer tokens over OAuth tokens", async () => {
-    const fetchMock = vi.fn();
-    globalThis.fetch = fetchMock;
-    fetchMock.mockResolvedValueOnce(jsonResponse({ result: {} })).mockResolvedValueOnce(
-      jsonResponse({
-        result: {
-          tools: [],
-        },
-      })
-    );
-
+  it("uses static bearer authentication without interactive login", async () => {
     await service.testRemoteServer(
-      remoteServer({
-        bearerToken: "static-token",
-        oauth: { enabled: true },
+      remoteServer({ bearerToken: "fixture-token", oauth: { enabled: true } })
+    );
+    expect(connectionMocks.create).toHaveBeenCalledWith(
+      expect.anything(),
+      "test",
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: "Bearer fixture-token" }),
       })
     );
-
-    expect(authMocks.service.getValidToken).not.toHaveBeenCalled();
-    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer static-token");
+    expect(authMocks.service.startOAuthFlow).not.toHaveBeenCalled();
   });
-
-  it("handles remote HTTP error responses and missing tool lists", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValueOnce(jsonResponse({}, { status: 503 }));
-    await expect(service.testRemoteServer(remoteServer())).resolves.toEqual({
-      success: false,
-      error: "HTTP 503",
-      toolCount: 0,
+  it("preserves OAuth options and reports phases", async () => {
+    vi.spyOn(service, "testRemoteServer")
+      .mockResolvedValueOnce({ success: false, requiresAuth: true, toolCount: 0 })
+      .mockResolvedValueOnce({ success: true, toolCount: 1 });
+    const phase = vi.fn();
+    const onUrl = vi.fn();
+    const server = remoteServer({
+      oauth: { enabled: false, clientId: "client", scopes: ["read"] },
     });
-
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ result: {} }))
-      .mockResolvedValueOnce(jsonResponse({ result: {} }, { status: 502 }));
-    await expect(service.testRemoteServer(remoteServer({ id: "remote-502" }))).resolves.toEqual({
-      success: false,
-      error: "HTTP 502",
-      toolCount: 0,
-    });
-
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ result: {} }))
-      .mockResolvedValueOnce(jsonResponse({ result: {} }));
-    await expect(service.testRemoteServer(remoteServer({ id: "remote-empty" }))).resolves.toEqual({
-      success: false,
-      error: "No tools in response",
-      toolCount: 0,
-    });
-  });
-
-  it("handles unauthorized HTTP responses with and without callback-driven OAuth", async () => {
-    const unauthorized = new Response("unauthorized", {
-      status: 401,
-      headers: {
-        "WWW-Authenticate": 'Bearer resource_metadata="https://auth.test/meta"',
-      },
-    });
-    globalThis.fetch = vi.fn().mockResolvedValue(unauthorized);
-
-    await expect(service.testRemoteServer(remoteServer(), true)).resolves.toEqual({
-      success: false,
-      error: "HTTP 401 - Authentication required",
-      toolCount: 0,
-      requiresAuth: true,
-    });
-
-    await expect(service.testRemoteServer(remoteServer())).resolves.toMatchObject({
-      success: false,
-      error: "Authentication required",
-      toolCount: 0,
-      requiresAuth: true,
-    });
-
-    service.setAuthCallback(async (server, authUrl, onComplete) => {
-      expect(server.id).toBe("remote-oauth");
-      expect(authUrl).toBe("https://auth.test/authorize");
-      expect(service.hasAuthInProgress("remote-oauth")).toBe(true);
-      await onComplete();
-      return true;
-    });
-
-    await expect(
-      service.testRemoteServer(remoteServer({ id: "remote-oauth", oauth: { enabled: true } }))
-    ).resolves.toMatchObject({
-      success: false,
-      error: "Authentication in progress",
-      toolCount: 0,
-      requiresAuth: true,
-      authInProgress: true,
-    });
-    expect(service.hasAuthInProgress("remote-oauth")).toBe(false);
-  });
-
-  it("parses streamable HTTP SSE responses and reports malformed streams", async () => {
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ result: {} }))
-      .mockResolvedValueOnce(
-        sseResponse([
-          "event: message\n",
-          "data: not-json\n\n",
-          'data: {"result":{"tools":[{"name":"stream"}]}}\n\n',
-        ])
-      );
-
-    await expect(service.testRemoteServer(remoteServer({ id: "remote-sse" }))).resolves.toEqual({
-      success: true,
-      toolCount: 1,
-    });
-    expect(configMocks.toolFilters["remote:remote-sse"].allTools).toEqual(["stream"]);
-
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ result: {} }))
-      .mockResolvedValueOnce(
-        new Response(null, { headers: { "content-type": "text/event-stream" } })
-      );
-    await expect(
-      service.testRemoteServer(remoteServer({ id: "remote-sse-empty-body" }))
-    ).resolves.toEqual({
-      success: false,
-      error: "No response body for SSE",
-      toolCount: 0,
-    });
-
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ result: {} }))
-      .mockResolvedValueOnce(sseResponse(["data: [DONE]\n\n"]));
-    await expect(
-      service.testRemoteServer(remoteServer({ id: "remote-sse-no-json" }))
-    ).resolves.toEqual({
-      success: false,
-      error: "No JSON data in SSE response",
-      toolCount: 0,
-    });
-  });
-
-  it("normalizes fetch aborts into timeout errors", async () => {
-    const abortError = new Error("aborted");
-    abortError.name = "AbortError";
-    globalThis.fetch = vi.fn().mockRejectedValue(abortError);
-
-    await expect(service.testRemoteServer(remoteServer())).resolves.toEqual({
-      success: false,
-      error: "Timeout",
-      toolCount: 0,
-    });
-  });
-
-  it("tests SSE servers through the MCP SDK transport", async () => {
-    const server = remoteServer({ type: "sse", url: "https://example.test/sse" });
-    sdkMocks.Client.mockImplementationOnce(function () {
-      const instance = {
-        connect: vi.fn(),
-        listTools: vi.fn().mockResolvedValue({ tools: [{ name: "events" }] }),
-        close: vi.fn(),
-      };
-      sdkMocks.clientInstances.push(instance);
-      return instance;
-    });
-
-    await expect(service.testRemoteServer(server)).resolves.toEqual({
-      success: true,
-      toolCount: 1,
-    });
-    expect(sdkMocks.SSEClientTransport).toHaveBeenCalledWith(new URL("https://example.test/sse"), {
-      requestInit: {
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json, text/event-stream",
-        },
-      },
-    });
-    expect(configMocks.toolFilters["remote:remote"].allTools).toEqual(["events"]);
-  });
-
-  it("handles SSE SDK authentication and timeout failures", async () => {
-    sdkMocks.Client.mockImplementationOnce(function () {
-      const instance = {
-        connect: vi.fn().mockRejectedValue(new Error("401 Unauthorized")),
-        listTools: vi.fn(),
-        close: vi.fn(),
-      };
-      sdkMocks.clientInstances.push(instance);
-      return instance;
-    });
-
-    await expect(
-      service.testRemoteServer(remoteServer({ id: "sse-auth", type: "sse" }), true)
-    ).resolves.toEqual({
-      success: false,
-      error: "HTTP 401 - Authentication required",
-      toolCount: 0,
-      requiresAuth: true,
-    });
-
-    sdkMocks.Client.mockImplementationOnce(function () {
-      const instance = {
-        connect: vi.fn().mockRejectedValue(new Error("Timeout")),
-        listTools: vi.fn(),
-        close: vi.fn(),
-      };
-      sdkMocks.clientInstances.push(instance);
-      return instance;
-    });
-
-    await expect(
-      service.testRemoteServer(remoteServer({ id: "sse-timeout", type: "sse" }))
-    ).resolves.toEqual({
-      success: false,
-      error: "Timeout",
-      toolCount: 0,
-    });
-  });
-
-  it("auto-enables OAuth, completes auth, and retests in testAndAuthenticate", async () => {
-    const fetchMock = vi.fn();
-    globalThis.fetch = fetchMock;
-    fetchMock
-      .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }))
-      .mockResolvedValueOnce(jsonResponse({ result: {} }))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          result: {
-            tools: [{ name: "after-auth" }],
-          },
-        })
-      );
-    const onAuthUrl = vi.fn();
-    const server = remoteServer({ oauth: undefined });
-
-    await expect(service.testAndAuthenticate(server, onAuthUrl)).resolves.toEqual({
+    await expect(service.testAndAuthenticate(server, onUrl, { onPhase: phase })).resolves.toEqual({
       success: true,
       toolCount: 1,
     });
     expect(configMocks.service.updateRemoteServer).toHaveBeenCalledWith("remote", {
-      oauth: { enabled: true },
+      oauth: { enabled: true, clientId: "client", scopes: ["read"] },
     });
-    expect(onAuthUrl).toHaveBeenCalledWith("https://auth.test/authorize");
-    expect(authMocks.service.waitForAuth).toHaveBeenCalledWith("state");
-    expect(authMocks.service.stopCallbackServer).toHaveBeenCalled();
+    expect(phase.mock.calls.flat()).toEqual([
+      "testing",
+      "authorization-required",
+      "waiting",
+      "retesting",
+    ]);
+    expect(onUrl).toHaveBeenCalledWith("https://auth.test/authorize");
+    expect(authMocks.service.releaseOAuthFlow).toHaveBeenCalledWith("state");
   });
-
-  it("reports failed and unsupported OAuth flows in testAndAuthenticate", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(new Response("unauthorized", { status: 401 }));
-    authMocks.service.startOAuthFlow.mockResolvedValueOnce(null);
-
-    await expect(service.testAndAuthenticate(remoteServer(), vi.fn())).resolves.toEqual({
+  it.each(["denied", "browser failed"])("releases its flow after %s", async (reason) => {
+    vi.spyOn(service, "testRemoteServer").mockResolvedValue({
       success: false,
-      error: "Failed to start OAuth flow - server may not support OAuth discovery",
-      toolCount: 0,
       requiresAuth: true,
+      toolCount: 0,
     });
-
-    authMocks.service.startOAuthFlow.mockResolvedValueOnce({
-      authUrl: "https://auth.test/authorize",
-      state: "failed-state",
+    authMocks.service.waitForAuth.mockResolvedValue({ success: false, error: "denied" });
+    const onUrl = vi.fn(async () => {
+      if (reason === "browser failed") throw new Error(reason);
     });
-    authMocks.service.waitForAuth.mockResolvedValueOnce({ success: false, error: "denied" });
-
-    await expect(service.testAndAuthenticate(remoteServer(), vi.fn())).resolves.toEqual({
+    await expect(service.testAndAuthenticate(remoteServer(), onUrl)).resolves.toMatchObject({
       success: false,
-      error: "Authentication failed: denied",
-      toolCount: 0,
-      requiresAuth: true,
     });
+    expect(authMocks.service.releaseOAuthFlow).toHaveBeenCalledWith("state");
   });
 
   it("retries testRemoteServerWithAuth when auth is in progress", async () => {

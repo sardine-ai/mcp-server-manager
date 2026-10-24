@@ -3,6 +3,7 @@
  */
 
 import React from "react";
+import type { RemoteServer } from "../../src/types/index.js";
 import { vi } from "vitest";
 import { render as inkRender } from "ink-testing-library";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -48,6 +49,12 @@ export const mockConfigService = {
 
 // Mock testing service
 export const mockTestingService = {
+  testAndAuthenticate: vi.fn(
+    async (_server: RemoteServer, _onUrl: (url: string) => Promise<void>, _options?: unknown) => ({
+      success: true,
+      toolCount: 3,
+    })
+  ),
   testServer: vi.fn(() => Promise.resolve({ success: true, toolCount: 0 })),
   testLocalServer: vi.fn(() => Promise.resolve({ success: true, toolCount: 5 })),
   testRemoteServer: vi.fn(() => Promise.resolve({ success: true, toolCount: 3 })),

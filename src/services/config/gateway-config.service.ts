@@ -15,6 +15,8 @@ export class GatewayConfigService {
       return { success: false, error: validation.error };
     }
 
+    if (this.getPort() === port) return { success: true };
+
     this.repository.updateConfig((config) => {
       config.port = port;
     });

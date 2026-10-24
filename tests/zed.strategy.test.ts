@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -62,6 +62,29 @@ describe("ZedStrategy", () => {
         },
       },
     });
+  });
+
+  it.each(["", "{", '{"a":1,,}', "null", "[]", "42", '"text"'])(
+    "does not overwrite invalid JSONC %j when connecting",
+    (input) => {
+      vi.spyOn(strategy, "isInstalled").mockReturnValue(true);
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(configPath, input);
+      expect(strategy.readConfig()).toBeNull();
+      expect(strategy.connect(8850).success).toBe(false);
+      expect(fs.readFileSync(configPath, "utf8")).toBe(input);
+      expect(strategy.disconnect().success).toBe(false);
+      expect(fs.readFileSync(configPath, "utf8")).toBe(input);
+    }
+  );
+
+  it("connects a missing file and preserves unrelated JSONC values", () => {
+    vi.spyOn(strategy, "isInstalled").mockReturnValue(true);
+    expect(strategy.connect(8850).success).toBe(true);
+    fs.writeFileSync(configPath, '{/* comment */ "text": "/*literal*/", "theme":"dark",}');
+    expect(strategy.connect(9000, "dev").success).toBe(true);
+    expect(strategy.readConfig()).toMatchObject({ text: "/*literal*/", theme: "dark" });
+    expect(strategy.hasGateway(strategy.readConfig(), "dev")).toBe(true);
   });
 
   it("writes formatted config and creates parent directories", () => {

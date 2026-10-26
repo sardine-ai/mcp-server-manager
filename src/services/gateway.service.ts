@@ -23,7 +23,11 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+  ListToolsResultSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import { getConfigService } from "./config.service.js";
 import { getAuthService } from "./auth.service.js";
 import { getEnvironmentService } from "./environment.service.js";
@@ -61,6 +65,11 @@ async function closeServerConnection(server: ConnectedServer): Promise<void> {
   } catch (error) {
     logger.warn(`Error closing connection to ${server.name}:`, error);
   }
+}
+
+export async function listToolsForGateway(client: Client): Promise<Tool[]> {
+  const result = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
+  return result.tools || [];
 }
 
 interface SessionEntry {
@@ -215,8 +224,7 @@ async function connectLocalServer(server: LocalServer): Promise<ConnectedServer 
     await client.connect(transport);
 
     // Get available tools
-    const toolsResult = await client.listTools();
-    const allTools = toolsResult.tools || [];
+    const allTools = await listToolsForGateway(client);
 
     // Apply tool filtering
     const toolFilters = configService.getToolFilters();
@@ -287,8 +295,7 @@ async function connectRemoteServer(server: RemoteServer): Promise<ConnectedServe
     await client.connect(transport);
 
     // Get available tools
-    const toolsResult = await client.listTools();
-    const allTools = toolsResult.tools || [];
+    const allTools = await listToolsForGateway(client);
 
     // Apply tool filtering
     const toolFilters = configService.getToolFilters();

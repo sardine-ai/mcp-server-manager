@@ -513,10 +513,12 @@ describe("TestingService unit coverage", () => {
 
   it("tests SSE servers through the MCP SDK transport", async () => {
     const server = remoteServer({ type: "sse", url: "https://example.test/sse" });
+    const sseTools = { tools: [{ name: "events" }] };
     sdkMocks.Client.mockImplementationOnce(function () {
       const instance = {
         connect: vi.fn(),
-        listTools: vi.fn().mockResolvedValue({ tools: [{ name: "events" }] }),
+        listTools: vi.fn().mockResolvedValue(sseTools),
+        request: vi.fn().mockResolvedValue(sseTools),
         close: vi.fn(),
       };
       sdkMocks.clientInstances.push(instance);

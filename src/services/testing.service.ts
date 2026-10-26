@@ -6,6 +6,7 @@ import { spawn, ChildProcess } from "child_process";
 import { TextDecoder } from "util";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { ListToolsResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type {
   LocalServer,
   RemoteServer,
@@ -655,8 +656,12 @@ export class TestingService {
       // Connect with timeout
       await Promise.race([client.connect(transport), timeoutPromise]);
 
-      // Get tools
-      const toolsResult = await Promise.race([client.listTools(), timeoutPromise]);
+      // List tools without compiling output schemas. Client.listTools()
+      // fails the test when an outputSchema $ref cannot be resolved.
+      const toolsResult = await Promise.race([
+        client.request({ method: "tools/list" }, ListToolsResultSchema),
+        timeoutPromise,
+      ]);
 
       const tools = toolsResult.tools || [];
 

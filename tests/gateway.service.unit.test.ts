@@ -13,9 +13,11 @@ const sdkMocks = vi.hoisted(() => {
   const listToolsResults: any[] = [];
 
   const Client = vi.fn(function () {
+    const toolsResult = listToolsResults.shift() ?? { tools: [] };
     const instance = {
       connect: vi.fn(),
-      listTools: vi.fn().mockResolvedValue(listToolsResults.shift() ?? { tools: [] }),
+      listTools: vi.fn().mockResolvedValue(toolsResult),
+      request: vi.fn().mockResolvedValue(toolsResult),
       callTool: vi.fn(),
     };
     clientInstances.push(instance);
@@ -472,16 +474,20 @@ describe("GatewayService unit coverage", () => {
   it("refreshes connected server tools and notifies active sessions", async () => {
     const sendToolListChanged = vi.fn();
     const failingNotify = vi.fn().mockRejectedValue(new Error("notify failed"));
-    const firstClient = {
-      listTools: vi.fn().mockResolvedValue({
-        tools: [
-          { name: "keep", description: "Keep" },
-          { name: "hide", description: "Hide" },
-        ],
-      }),
+    const firstTools = {
+      tools: [
+        { name: "keep", description: "Keep" },
+        { name: "hide", description: "Hide" },
+      ],
     };
+    const firstClient = {
+      listTools: vi.fn().mockResolvedValue(firstTools),
+      request: vi.fn().mockResolvedValue(firstTools),
+    };
+    const listFailed = new Error("list failed");
     const secondClient = {
-      listTools: vi.fn().mockRejectedValue(new Error("list failed")),
+      listTools: vi.fn().mockRejectedValue(listFailed),
+      request: vi.fn().mockRejectedValue(listFailed),
     };
     serviceMocks.configService.getToolFilters.mockReturnValue({
       local1: { disabledTools: ["hide"] },

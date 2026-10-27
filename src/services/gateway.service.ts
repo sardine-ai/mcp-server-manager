@@ -22,8 +22,13 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, ListToolsResult, Tool } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListToolsResultSchema,
+} from "@modelcontextprotocol/sdk/types.js";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv-provider.js";
 import { getConfigService } from "./config.service.js";
 import { getAuthService } from "./auth.service.js";
 import { getEnvironmentService } from "./environment.service.js";
@@ -35,6 +40,7 @@ import { VERSION } from "../shared/version.js";
 import type { LocalServer, RemoteServer } from "../types/index.js";
 
 const logger = createLogger("GatewayService");
+const outputSchemaValidator = new AjvJsonSchemaValidator();
 
 type RemoteTransport = SSEClientTransport | StreamableHTTPClientTransport;
 
@@ -181,6 +187,35 @@ async function reconnectServer(serverId: string): Promise<void> {
 }
 
 /**
+ * List tools without compiling output schemas.
+ * Client.listTools() fails the connection when an outputSchema $ref cannot be resolved.
+ */
+async function listGatewayTools(client: Client): Promise<ListToolsResult> {
+  return client.request({ method: "tools/list" }, ListToolsResultSchema);
+}
+
+/**
+ * SDK clients compile every advertised outputSchema during tools/list.
+ * Drop a schema that cannot be compiled so one upstream tool cannot hide the rest.
+ * The tool itself stays callable.
+ */
+function toolForClients(tool: Tool): Tool {
+  if (!tool.outputSchema) {
+    return tool;
+  }
+
+  try {
+    outputSchemaValidator.getValidator(tool.outputSchema);
+    return tool;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.debug(`Omitting output schema for ${tool.name}: ${message}`);
+    const { outputSchema: _outputSchema, ...advertised } = tool;
+    return advertised;
+  }
+}
+
+/**
  * Connect to a local STDIO-based MCP server
  */
 async function connectLocalServer(server: LocalServer): Promise<ConnectedServer | null> {
@@ -215,7 +250,7 @@ async function connectLocalServer(server: LocalServer): Promise<ConnectedServer 
     await client.connect(transport);
 
     // Get available tools
-    const toolsResult = await client.listTools();
+    const toolsResult = await listGatewayTools(client);
     const allTools = toolsResult.tools || [];
 
     // Apply tool filtering
@@ -287,7 +322,7 @@ async function connectRemoteServer(server: RemoteServer): Promise<ConnectedServe
     await client.connect(transport);
 
     // Get available tools
-    const toolsResult = await client.listTools();
+    const toolsResult = await listGatewayTools(client);
     const allTools = toolsResult.tools || [];
 
     // Apply tool filtering
@@ -316,21 +351,22 @@ async function connectRemoteServer(server: RemoteServer): Promise<ConnectedServe
 }
 
 function prefixTool(serverName: string, tool: Tool): Tool {
+  const source = toolForClients(tool);
   const prefixedTool: Tool = {
-    ...tool,
-    name: `${serverName}__${tool.name}`,
-    description: `[${serverName}] ${tool.description || ""}`,
+    ...source,
+    name: `${serverName}__${source.name}`,
+    description: `[${serverName}] ${source.description || ""}`,
   };
 
   // Clients display title over name, so titles need the prefix too
-  if (tool.title) {
-    prefixedTool.title = `[${serverName}] ${tool.title}`;
+  if (source.title) {
+    prefixedTool.title = `[${serverName}] ${source.title}`;
   }
 
-  if (tool.annotations?.title) {
+  if (source.annotations?.title) {
     prefixedTool.annotations = {
-      ...tool.annotations,
-      title: `[${serverName}] ${tool.annotations.title}`,
+      ...source.annotations,
+      title: `[${serverName}] ${source.annotations.title}`,
     };
   }
 
@@ -965,7 +1001,7 @@ export async function refreshGatewayTools(
     const refreshResults = await Promise.all(
       servers.map(async (server) => {
         try {
-          const toolsResult = await server.client.listTools();
+          const toolsResult = await listGatewayTools(server.client);
           const allTools = toolsResult.tools || [];
           const disabledTools = new Set(toolFilters[server.id]?.disabledTools || []);
           server.tools = allTools.filter((tool) => !disabledTools.has(tool.name));

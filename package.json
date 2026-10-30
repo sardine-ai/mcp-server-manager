@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-manager",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "Interactive CLI to manage, test, and run multiple MCP (Model Context Protocol) servers with OAuth support",
   "type": "module",
   "bin": {

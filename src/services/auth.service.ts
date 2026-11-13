@@ -1081,9 +1081,13 @@ export class AuthService {
       return;
     }
 
-    // Schedule refresh 10 minutes before expiry
-    const refreshAt = stored.expiresAt - PROACTIVE_REFRESH_MARGIN_MS;
-    const delay = Math.max(refreshAt - Date.now(), 1000); // at least 1 second
+    // Schedule refresh 10 minutes before expiry. Tokens living less than that
+    // are refreshed halfway through, otherwise they would refresh every second.
+    const remainingMs = stored.expiresAt - Date.now();
+    const delay =
+      remainingMs > PROACTIVE_REFRESH_MARGIN_MS
+        ? remainingMs - PROACTIVE_REFRESH_MARGIN_MS
+        : Math.max(remainingMs / 2, 1000);
 
     log.debug(`Scheduling proactive refresh for ${server.name} in ${Math.round(delay / 1000)}s`);
 
@@ -1137,18 +1141,11 @@ export class AuthService {
   ): void {
     const retryCount = this.refreshRetryCounts.get(server.id) || 0;
 
-    if (retryCount >= PROACTIVE_RETRY_DELAYS_MS.length) {
-      log.warn(
-        `Proactive refresh for ${server.name} exhausted all ${PROACTIVE_RETRY_DELAYS_MS.length} retries`
-      );
-      this.refreshTimers.delete(server.id);
-      this.refreshRetryCounts.delete(server.id);
-      return;
-    }
-
-    const delay = PROACTIVE_RETRY_DELAYS_MS[retryCount];
+    // Keep retrying at the longest delay so a login done by another process is picked up
+    const delay =
+      PROACTIVE_RETRY_DELAYS_MS[Math.min(retryCount, PROACTIVE_RETRY_DELAYS_MS.length - 1)];
     log.warn(
-      `Proactive refresh failed for ${server.name}, retry ${retryCount + 1}/${PROACTIVE_RETRY_DELAYS_MS.length} in ${delay / 1000}s`
+      `Proactive refresh failed for ${server.name}, retry ${retryCount + 1} in ${delay / 1000}s`
     );
 
     this.refreshRetryCounts.set(server.id, retryCount + 1);

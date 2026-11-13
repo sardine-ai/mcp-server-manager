@@ -528,6 +528,38 @@ describe("AuthService unit coverage", () => {
     expect((service as unknown as AuthServiceInternals).refreshRetryCounts.size).toBe(0);
   });
 
+  it("refreshes short-lived tokens halfway through instead of every second", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const server = remoteServer();
+    const refresh = vi
+      .spyOn(service, "refreshTokenWithMutex")
+      .mockResolvedValue(token({ expiresAt: Date.now() + 5 * 60 * 1000 }));
+
+    service.saveTokensForServer("remote", token({ expiresAt: Date.now() + 5 * 60 * 1000 }));
+    service.scheduleRefreshForServer(server);
+
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+    expect(refresh).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(30 * 1000);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps retrying proactive refresh after the backoff delays run out", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const server = remoteServer();
+    const refresh = vi.spyOn(service, "refreshTokenWithMutex").mockResolvedValue(null);
+
+    service.saveTokensForServer("remote", token({ expiresAt: Date.now() + 11 * 60 * 1000 }));
+    service.scheduleRefreshForServer(server);
+
+    await vi.advanceTimersByTimeAsync(60 * 1000 + (30 + 60 + 120 + 240 + 480) * 1000);
+    expect(refresh).toHaveBeenCalledTimes(6);
+    await vi.advanceTimersByTimeAsync(480 * 1000);
+    expect(refresh).toHaveBeenCalledTimes(7);
+  });
+
   it("processes callback server routes and exchanges authorization codes", async () => {
     const redirectUri = await service.startCallbackServer();
     const baseUrl = redirectUri.replace("/callback", "");

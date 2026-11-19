@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import http from "http";
+import net from "net";
 import os from "os";
 import path from "path";
 import { AuthService, resetAuthService } from "../src/services/auth.service.js";
@@ -601,5 +602,70 @@ describe("AuthService unit coverage", () => {
       clientSecret: "secret",
     });
     expect(service.getPendingAuthState("remote")).toBeNull();
+  });
+
+  describe("OAuth callback port", () => {
+    function writeSettings(settings: Record<string, unknown>): void {
+      fs.writeFileSync(path.join(configDir, "settings.json"), JSON.stringify(settings));
+    }
+
+    function freePort(): Promise<number> {
+      return new Promise((resolve) => {
+        const probe = net.createServer();
+        probe.listen(0, "127.0.0.1", () => {
+          const address = probe.address() as net.AddressInfo;
+          probe.close(() => resolve(address.port));
+        });
+      });
+    }
+
+    function occupy(port: number): Promise<net.Server> {
+      return new Promise((resolve) => {
+        const squatter = net.createServer();
+        squatter.listen(port, "127.0.0.1", () => resolve(squatter));
+      });
+    }
+
+    it("scans the callback range when oauthCallbackPort is 0", async () => {
+      writeSettings({ oauthCallbackPort: 0 });
+      const pinned = new AuthService(configDir);
+
+      try {
+        const redirectUri = await pinned.startCallbackServer();
+        const port = Number(new URL(redirectUri).port);
+
+        expect(port).toBeGreaterThanOrEqual(8400);
+        expect(port).toBeLessThanOrEqual(8450);
+      } finally {
+        pinned.stopCallbackServer();
+      }
+    });
+
+    it("uses a pinned oauthCallbackPort verbatim", async () => {
+      const port = await freePort();
+      writeSettings({ oauthCallbackPort: port });
+      const pinned = new AuthService(configDir);
+
+      try {
+        await expect(pinned.startCallbackServer()).resolves.toBe(
+          `http://127.0.0.1:${port}/callback`
+        );
+      } finally {
+        pinned.stopCallbackServer();
+      }
+    });
+
+    it("fails instead of moving ports when the pinned port is taken", async () => {
+      const port = await freePort();
+      writeSettings({ oauthCallbackPort: port });
+      const squatter = await occupy(port);
+
+      try {
+        const pinned = new AuthService(configDir);
+        await expect(pinned.startCallbackServer()).rejects.toMatchObject({ code: "EADDRINUSE" });
+      } finally {
+        squatter.close();
+      }
+    });
   });
 });

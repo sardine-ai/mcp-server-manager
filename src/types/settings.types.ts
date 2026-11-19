@@ -8,6 +8,8 @@ export interface Settings {
   port: number;
   /** Preferred editor for config files */
   editor: string;
+  /** OAuth callback port; 0 picks the first free port in the callback range */
+  oauthCallbackPort: number;
 }
 
 /** Available theme options (kept for future use) */

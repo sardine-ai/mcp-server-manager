@@ -15,8 +15,9 @@ mcpsm settings
 ```
 Settings:
 
-  port            8850          Gateway port number
-  editor          vi            Default editor command
+  port             8850          Gateway port number
+  editor           vi            Default editor command
+  oauthCallbackPort 0            OAuth callback port (0 = auto-select)
 ```
 
 ---

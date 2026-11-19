@@ -15,6 +15,7 @@ const log = createLogger("SettingsService");
 const DEFAULT_SETTINGS: Settings = {
   port: 8850,
   editor: process.env.EDITOR || process.env.VISUAL || "vi",
+  oauthCallbackPort: 0,
 };
 
 /** Internal settings (not exposed in Settings interface, kept for future expansion) */
@@ -31,6 +32,11 @@ const SETTINGS_INFO: SettingsInfo = {
     description: "Preferred editor for config files",
     type: "string",
     default: "vi",
+  },
+  oauthCallbackPort: {
+    description: "OAuth callback port (0 = auto-select)",
+    type: "number",
+    default: 0,
   },
 };
 
@@ -104,6 +110,10 @@ export class SettingsService {
     }
 
     if (key === "port") {
+      const validation = validatePort(Number(parsedValue));
+      if (!validation.valid) return { success: false, error: validation.error };
+    }
+    if (key === "oauthCallbackPort" && Number(parsedValue) !== 0) {
       const validation = validatePort(Number(parsedValue));
       if (!validation.valid) return { success: false, error: validation.error };
     }

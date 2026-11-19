@@ -76,16 +76,32 @@ Application-wide settings:
 ```json
 {
   "port": 8850,
-  "editor": "code"
+  "editor": "code",
+  "oauthCallbackPort": 0
 }
 ```
 
 ### Available Settings
 
-| Setting  | Type   | Default | Description                                     |
-| -------- | ------ | ------- | ----------------------------------------------- |
-| `port`   | number | `8850`  | Gateway port (updated in all connected clients) |
-| `editor` | string | `code`  | Default editor command                          |
+| Setting             | Type   | Default | Description                                     |
+| ------------------- | ------ | ------- | ----------------------------------------------- |
+| `port`              | number | `8850`  | Gateway port (updated in all connected clients) |
+| `editor`            | string | `code`  | Default editor command                          |
+| `oauthCallbackPort` | number | `0`     | Fixed OAuth callback port (`0` = auto-select)   |
+
+### OAuth Callback Port
+
+By default the OAuth callback server takes the first free port between `8400` and `8450`, so the
+redirect URI changes whenever that port is taken. Providers that require the redirect URI to match
+what was registered with them exactly — Asana's V2 MCP server, for example — need a fixed port:
+
+```bash
+mcpsm settings set oauthCallbackPort 8400
+```
+
+With a fixed port the callback URI is always `http://127.0.0.1:8400/callback`, which is what you
+register in the provider's console. If that port is already in use, the flow fails instead of
+silently moving to another port.
 
 ### Port Changes
 

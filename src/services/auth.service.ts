@@ -498,13 +498,48 @@ export class AuthService {
     throw new Error("No available port found for OAuth callback server");
   }
 
+  /**
+   * Read the pinned OAuth callback port from this service's own settings file.
+   * 0 or a missing entry means auto-select.
+   */
+  private getPinnedCallbackPort(): number {
+    try {
+      const settingsPath = path.join(this.configDir, "settings.json");
+      if (!fs.existsSync(settingsPath)) {
+        return 0;
+      }
+
+      const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
+        oauthCallbackPort?: number;
+      };
+      return typeof parsed.oauthCallbackPort === "number" ? parsed.oauthCallbackPort : 0;
+    } catch (error) {
+      log.debug("Failed to read oauthCallbackPort from settings:", error);
+      return 0;
+    }
+  }
+
+  /**
+   * Resolve the callback port. A pinned oauthCallbackPort is used as-is because the
+   * redirect URI registered with the provider has to match it exactly; otherwise the
+   * first free port in the callback range is taken.
+   */
+  private async resolveCallbackPort(): Promise<number> {
+    const pinnedPort = this.getPinnedCallbackPort();
+    if (pinnedPort > 0) {
+      return pinnedPort;
+    }
+
+    return this.findAvailablePort();
+  }
+
   /** Start the callback server to receive OAuth redirects */
   async startCallbackServer(): Promise<string> {
     if (this.callbackServer) {
       return `http://127.0.0.1:${this.callbackPort}/callback`;
     }
 
-    this.callbackPort = await this.findAvailablePort();
+    this.callbackPort = await this.resolveCallbackPort();
 
     return new Promise((resolve, reject) => {
       this.callbackServer = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -800,7 +835,7 @@ export class AuthService {
 
       return { authUrl: url, state };
     } catch (error) {
-      log.debug("Error starting OAuth flow:", error);
+      log.warn(`Error starting OAuth flow for ${server.id}:`, error);
       return null;
     }
   }

@@ -170,10 +170,11 @@ Settings:
 
 ### Settings
 
-| Setting | Type   | Description                                  |
-| ------- | ------ | -------------------------------------------- |
-| Port    | Number | Gateway port (updates all connected clients) |
-| Editor  | String | Default editor command                       |
+| Setting             | Type   | Description                                   |
+| ------------------- | ------ | --------------------------------------------- |
+| Port                | Number | Gateway port (updates all connected clients)  |
+| Editor              | String | Default editor command                        |
+| OAuth Callback Port | Number | Fixed OAuth callback port (`0` = auto-select) |
 
 ### Actions
 

@@ -138,7 +138,18 @@ mcpsm auth login my-api
 
 ### OAuth Callback Failed
 
-Ensure no other process is using the callback port (default: 8888).
+The callback server takes the first free port between `8400` and `8450`, so the redirect URI
+normally ends in `/callback` on one of those ports. Make sure nothing else is holding it.
+
+Some providers require the redirect URI to match what you registered with them exactly. Pin the
+port so it never moves:
+
+```bash
+mcpsm settings set oauthCallbackPort 8400
+```
+
+The callback URI is then always `http://127.0.0.1:8400/callback`. If that port is taken, the flow
+fails instead of silently using another one.
 
 ### Token Expired
 

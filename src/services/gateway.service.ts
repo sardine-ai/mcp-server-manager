@@ -639,7 +639,12 @@ function createSessionServer(profileId?: string, projectDir?: string): Server {
     const toolMap = profileId
       ? (gatewayState.profileViews.get(profileId)?.toolToServerMap ?? new Map<string, string>())
       : gatewayState.toolToServerMap;
-    if (!projectDir) return await handleToolCall(toolName, args, toolMap);
+    const sharedId = toolMap.get(toolName);
+    const shared = sharedId ? gatewayState.connectedServers.get(sharedId) : undefined;
+    // Remote servers are shared, so their calls need not wait for the project's local ones
+    if (!projectDir || shared?.type === "remote") {
+      return await handleToolCall(toolName, args, toolMap);
+    }
 
     // Local servers read their cwd, so calls run on the project's instances
     const entry = gatewayState.projects.get(projectDir);
@@ -651,8 +656,6 @@ function createSessionServer(profileId?: string, projectDir?: string): Server {
     }
 
     // Listed from the shared instance before the project's started
-    const sharedId = toolMap.get(toolName);
-    const shared = sharedId ? gatewayState.connectedServers.get(sharedId) : undefined;
     if (!sharedId || !shared) return toolError(`Unknown tool: ${toolName}`);
     if (!view.servers.has(sharedId)) {
       return toolError(`${shared.name} failed to start in ${projectDir}. See: mcpsm daemon logs`);
@@ -1149,7 +1152,11 @@ export async function refreshGatewayTools(
     getProfileService().reload();
 
     const toolFilters = configService.getToolFilters();
-    const servers = Array.from(gatewayState.connectedServers.values());
+    // Project instances too, so a disabled tool disappears from project sessions
+    const servers = [
+      ...gatewayState.connectedServers.values(),
+      ...[...gatewayState.projects.values()].flatMap((entry) => [...entry.servers.values()]),
+    ];
 
     const refreshResults = await Promise.all(
       servers.map(async (server) => {

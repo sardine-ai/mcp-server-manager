@@ -20,6 +20,10 @@ import type {
   ClientStatus,
 } from "../../types/index.js";
 import { createLogger } from "../../shared/logger.js";
+import { fileURLToPath } from "url";
+
+/** The installed CLI script (bin/cli.js), from src/ or dist/services/clients */
+export const CLI_SCRIPT = fileURLToPath(new URL("../../../bin/cli.js", import.meta.url));
 
 /**
  * Abstract base class for all client strategies
@@ -172,14 +176,27 @@ export abstract class BaseClientStrategy implements IClientStrategy {
 
   /**
    * `mcpsm bridge`, which the client starts in its project folder so the gateway runs
-   * local servers there. Absolute path: GUI clients often lack the shell's PATH.
+   * local servers there. Node and the script are absolute: GUI clients often lack the
+   * shell's PATH, which both `mcpsm` and its `#!/usr/bin/env node` need.
    */
-  protected buildBridgeConfig(port: number, profileId?: string) {
+  protected buildBridgeConfig(
+    port: number,
+    profileId?: string
+  ): { command: string; args: string[] } {
     const mcpPath = profileId ? `/mcp/${profileId}` : "/mcp";
     return {
-      command: this.findExecutable("mcpsm", this.getPlatform()) ?? "mcpsm",
-      args: ["bridge", `http://localhost:${port}${mcpPath}`],
+      command: this.findNode(),
+      args: [CLI_SCRIPT, "bridge", `http://localhost:${port}${mcpPath}`],
     };
+  }
+
+  /** This Node by its PATH name if that is the same binary (it survives upgrades), else its own path */
+  private findNode(): string {
+    const onPath = this.findExecutable("node", this.getPlatform());
+    try {
+      if (onPath && fs.realpathSync(onPath) === fs.realpathSync(process.execPath)) return onPath;
+    } catch {}
+    return process.execPath;
   }
 
   buildGatewayConfig(port: number, profileId?: string): ClientServerConfig {

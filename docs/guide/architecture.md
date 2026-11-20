@@ -154,8 +154,8 @@ When you run `mcpsm clients connect <client>`:
    ```json
    {
      "mcpsm": {
-       "command": "mcpsm",
-       "args": ["bridge", "http://localhost:PORT/mcp"]
+       "command": "/path/to/node",
+       "args": ["/path/to/mcp-server-manager/bin/cli.js", "bridge", "http://localhost:PORT/mcp"]
      }
    }
    ```
@@ -215,15 +215,15 @@ The **gateway server** in each client configuration is what connects them:
 ```json
 {
   "mcpsm": {
-    "command": "mcpsm",
-    "args": ["bridge", "http://localhost:PORT/mcp"]
+    "command": "/path/to/node",
+    "args": ["/path/to/mcp-server-manager/bin/cli.js", "bridge", "http://localhost:PORT/mcp"]
   }
 }
 ```
 
 `mcpsm bridge` forwards all MCP messages to the daemon and passes the folder the client started it in. See [Project Folders](#project-folders).
 
-mcpsm writes the absolute path of `mcpsm` when it is on your `PATH`, so GUI clients that do not load your shell profile still find it.
+This runs `mcpsm bridge <url>`. mcpsm writes absolute paths to Node and its CLI script, so GUI clients that do not load your shell profile can start it without `node` or `mcpsm` on their `PATH`.
 
 ### Project Folders
 
@@ -236,7 +236,7 @@ Local (STDIO) servers such as Serena, jbcontext, or context-mode read their work
 3. The daemon starts every selected local server in the project folder when the first session for that folder begins. These instances are shared by every session in the folder and stopped when its last session ends. Tool calls to local servers run on them.
 4. Remote (HTTP/SSE) servers and sessions without a project keep using the daemon's shared instances.
 
-Until the project's instances have started, the session lists the shared instances' tools, so clients do not wait. Then the daemon sends `notifications/tools/list_changed`, and the session lists the tools the project's instances offer, which can differ: Serena started in a project leaves out `activate_project` and `get_current_config`. Calling a tool from the earlier list that the project's instance lacks returns an error saying so.
+Until the project's instances have started, the session lists the shared instances' tools, so clients do not wait. Then the daemon sends `notifications/tools/list_changed`, and the session lists the tools the project's instances offer, which can differ: Serena started in a project leaves out `activate_project` and `get_current_config`. Calling a tool from the earlier list that the project's instance lacks returns an error saying so. A call to a local server's tool waits for the project's instances; a call to a remote server's tool does not.
 
 ### Request Checks
 

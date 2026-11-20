@@ -170,8 +170,8 @@ When you connect a client, mcpsm adds this to the client's MCP server config:
 ```json
 {
   "mcpsm": {
-    "command": "mcpsm",
-    "args": ["bridge", "http://localhost:PORT/mcp"]
+    "command": "/path/to/node",
+    "args": ["/path/to/mcp-server-manager/bin/cli.js", "bridge", "http://localhost:PORT/mcp"]
   }
 }
 ```

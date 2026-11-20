@@ -52,4 +52,10 @@ export class AntigravityStrategy extends JsonClientStrategy {
       candidates[0]
     );
   }
+
+  /** A config file at the older location also counts as installed */
+  isInstalled(platform: Platform): boolean {
+    const configPath = this.getPrimaryConfigPath(platform);
+    return (!!configPath && fs.existsSync(configPath)) || super.isInstalled(platform);
+  }
 }

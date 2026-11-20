@@ -271,8 +271,8 @@ When you connect clients using `mcpsm clients connect`, each client gets a gatew
 ```json
 {
   "mcpsm": {
-    "command": "mcpsm",
-    "args": ["bridge", "http://localhost:{port}/mcp"]
+    "command": "/path/to/node",
+    "args": ["/path/to/mcp-server-manager/bin/cli.js", "bridge", "http://localhost:{port}/mcp"]
   }
 }
 ```

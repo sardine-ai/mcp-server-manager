@@ -186,7 +186,11 @@ describe("Gateway port changes", () => {
       mcp_servers: {
         other,
         disabled: { enabled: false },
-        mcpsm: { command: "mcpsm", args: ["bridge", "http://localhost:9000/mcp"], enabled: false },
+        mcpsm: {
+          command: process.execPath,
+          args: [path.resolve("bin/cli.js"), "bridge", "http://localhost:9000/mcp"],
+          enabled: false,
+        },
       },
     });
   });
@@ -206,7 +210,12 @@ describe("Gateway port changes", () => {
     expect(JSON.parse(fs.readFileSync(openCodePath, "utf8")).mcp["mcpsm-dev"]).toEqual({
       enabled: false,
       type: "local",
-      command: ["mcpsm", "bridge", "http://localhost:9000/mcp/dev"],
+      command: [
+        process.execPath,
+        path.resolve("bin/cli.js"),
+        "bridge",
+        "http://localhost:9000/mcp/dev",
+      ],
     });
     expect(JSON.parse(fs.readFileSync(zedPath, "utf8")).context_servers["mcpsm-dev"]).toMatchObject(
       { headers: { "X-Custom": "keep" }, url: "http://localhost:9000/mcp/dev" }

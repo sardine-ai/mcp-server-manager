@@ -6,7 +6,10 @@ import { OpenCodeStrategy } from "../src/services/clients/opencode.strategy.js";
 import type { ClientMcpConfig } from "../src/types/index.js";
 
 const OPENCODE_SCHEMA_URL = "https://opencode.ai/config.json";
-const GATEWAY = { type: "local", command: ["mcpsm", "bridge", "http://localhost:8850/mcp"] };
+const GATEWAY = {
+  type: "local",
+  command: [process.execPath, path.resolve("bin/cli.js"), "bridge", "http://localhost:8850/mcp"],
+};
 
 describe("OpenCodeStrategy", () => {
   let root: string;

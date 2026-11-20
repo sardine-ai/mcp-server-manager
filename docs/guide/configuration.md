@@ -183,8 +183,8 @@ When you connect a client, mcpsm adds this gateway server entry:
 ```json
 {
   "mcpsm": {
-    "command": "mcpsm",
-    "args": ["bridge", "http://localhost:PORT/mcp"]
+    "command": "/path/to/node",
+    "args": ["/path/to/mcp-server-manager/bin/cli.js", "bridge", "http://localhost:PORT/mcp"]
   }
 }
 ```

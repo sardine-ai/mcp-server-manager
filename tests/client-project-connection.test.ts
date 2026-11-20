@@ -127,8 +127,8 @@ describe("Project client connections", () => {
     const config = TOML.parse(fs.readFileSync(configPath, "utf8"));
     expect(config.mcp_servers).toEqual({
       "mcpsm-dev": {
-        command: expect.stringMatching(/mcpsm(\.cmd)?$/i),
-        args: ["bridge", "http://localhost:8850/mcp/dev"],
+        command: process.execPath,
+        args: [path.resolve("bin/cli.js"), "bridge", "http://localhost:8850/mcp/dev"],
       },
     });
   });

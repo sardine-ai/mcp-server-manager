@@ -11,6 +11,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import {
   PROJECT_DIR_HEADER,
+  refreshGatewayTools,
   rejectRequestSource,
   resolveProjectDir,
   startGateway,
@@ -40,6 +41,8 @@ vi.mock("../src/services/profile.service.js", () => ({ getProfileService: () => 
 vi.mock("../src/services/settings.service.js", () => ({ getAllowedOrigins: () => mocks.origins }));
 
 const fixture = path.resolve("tests/fixtures/cwd-server.mjs");
+// The gateway starts local servers through a POSIX login shell (`sh -l -c`)
+const itLocal = it.skipIf(process.platform === "win32");
 
 async function freePort(): Promise<number> {
   const server = net.createServer();
@@ -114,24 +117,27 @@ describe("gateway HTTP endpoint", () => {
     return { client, transport };
   }
 
-  it("runs local servers in the project folder sent by the client, once per project", async () => {
-    const headers = { [PROJECT_DIR_HEADER]: encodeURIComponent(projectDir) };
-    const first = await connectHttp(headers);
-    const second = await connectHttp(headers);
+  itLocal(
+    "runs local servers in the project folder sent by the client, once per project",
+    async () => {
+      const headers = { [PROJECT_DIR_HEADER]: encodeURIComponent(projectDir) };
+      const first = await connectHttp(headers);
+      const second = await connectHttp(headers);
 
-    const a = await callCwd(first.client);
-    const b = await callCwd(second.client);
-    expect(a.cwd).toBe(fs.realpathSync(projectDir));
-    expect(b.pid).toBe(a.pid);
+      const a = await callCwd(first.client);
+      const b = await callCwd(second.client);
+      expect(a.cwd).toBe(fs.realpathSync(projectDir));
+      expect(b.pid).toBe(a.pid);
 
-    // The project's instance stops when its last session ends
-    await first.transport.terminateSession();
-    expect((await callCwd(second.client)).pid).toBe(a.pid);
-    await second.transport.terminateSession();
-    expect(await waitForExit(a.pid)).toBe(true);
-  });
+      // The project's instance stops when its last session ends
+      await first.transport.terminateSession();
+      expect((await callCwd(second.client)).pid).toBe(a.pid);
+      await second.transport.terminateSession();
+      expect(await waitForExit(a.pid)).toBe(true);
+    }
+  );
 
-  it("keeps the daemon's shared instance for sessions without a project", async () => {
+  itLocal("keeps the daemon's shared instance for sessions without a project", async () => {
     const plain = await connectHttp();
     const invalid = await connectHttp({ [PROJECT_DIR_HEADER]: "%E0%A4%A" });
     const daemon = await callCwd(plain.client);
@@ -141,7 +147,7 @@ describe("gateway HTTP endpoint", () => {
     expect(names).toEqual(["cwd__cwd", "cwd__shared_only"]);
   });
 
-  it("switches a project session to the tools its project's instance offers", async () => {
+  itLocal("switches a project session to the tools its project's instance offers", async () => {
     const project = fs.mkdtempSync(path.join(os.tmpdir(), "mcpsm-tools-"));
     fs.writeFileSync(path.join(project, ".fixture-project"), "");
     try {
@@ -171,12 +177,18 @@ describe("gateway HTTP endpoint", () => {
       expect((await client.callTool({ name: "cwd__nope", arguments: {} })).content).toMatchObject([
         { text: "Unknown tool: cwd__nope" },
       ]);
+
+      // Disabling a tool hides it from project sessions too
+      mocks.config.getToolFilters.mockReturnValue({ cwd: { disabledTools: ["project_only"] } });
+      await refreshGatewayTools("test");
+      expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["cwd__cwd"]);
     } finally {
+      mocks.config.getToolFilters.mockReturnValue({});
       fs.rmSync(project, { recursive: true, force: true });
     }
   });
 
-  it("passes the folder a client starts `mcpsm bridge` in, and its tool changes", async () => {
+  itLocal("passes the folder a client starts `mcpsm bridge` in, and its tool changes", async () => {
     const project = fs.mkdtempSync(path.join(os.tmpdir(), "mcpsm-bridge-"));
     fs.writeFileSync(path.join(project, ".fixture-project"), "");
     const tsx = pathToFileURL(path.resolve("node_modules/tsx/dist/loader.mjs")).href;

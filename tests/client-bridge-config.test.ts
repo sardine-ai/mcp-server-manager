@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { spawnSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -8,7 +9,8 @@ import { ClaudeCodeStrategy } from "../src/services/clients/claude-code.strategy
 import { CodexStrategy } from "../src/services/clients/codex.strategy.js";
 import { CursorStrategy } from "../src/services/clients/cursor.strategy.js";
 
-const BRIDGE = { command: "mcpsm", args: ["bridge", "http://localhost:8850/mcp"] };
+const CLI = path.resolve("bin/cli.js");
+const BRIDGE = { command: process.execPath, args: [CLI, "bridge", "http://localhost:8850/mcp"] };
 
 describe("client gateway entries", () => {
   let root: string;
@@ -54,6 +56,7 @@ describe("client gateway entries", () => {
       const strategy = new AntigravityStrategy();
 
       expect(strategy.getEffectiveConfigPath("darwin")).toBe(legacy);
+      expect(strategy.isInstalled("linux")).toBe(true); // no app bundle or executable needed
       expect(strategy.connect(8850).success).toBe(true);
       expect(JSON.parse(fs.readFileSync(legacy, "utf8")).mcpServers).toEqual({
         other: { command: "node" },
@@ -102,19 +105,18 @@ describe("client gateway entries", () => {
 
   it("passes Cursor's workspace folder to the bridge", () => {
     expect(new CursorStrategy().buildGatewayConfig(8850, "dev")).toEqual({
-      command: "mcpsm",
-      args: ["bridge", "http://localhost:8850/mcp/dev", "--cwd", "${workspaceFolder}"],
+      command: process.execPath,
+      args: [CLI, "bridge", "http://localhost:8850/mcp/dev", "--cwd", "${workspaceFolder}"],
     });
   });
 
-  it.skipIf(process.platform === "win32")(
-    "uses the absolute mcpsm path so GUI clients without the shell PATH find it",
-    () => {
-      const bin = path.join(root, "bin");
-      write(path.join(bin, "mcpsm"), "#!/bin/sh\n");
-      fs.chmodSync(path.join(bin, "mcpsm"), 0o755);
-      vi.stubEnv("PATH", bin);
-      expect(new CodexStrategy().buildGatewayConfig(8850).command).toBe(path.join(bin, "mcpsm"));
-    }
-  );
+  it("runs the CLI with Node directly, so clients without node or mcpsm on PATH can start it", () => {
+    const { command, args } = new CodexStrategy().buildGatewayConfig(8850);
+    const run = spawnSync(command as string, [(args as string[])[0], "--version"], {
+      env: { ...process.env, PATH: "", MCP_MANAGER_CONFIG_DIR: root },
+      encoding: "utf8",
+    });
+    expect(run.stderr).toBe("");
+    expect(run.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+  });
 });

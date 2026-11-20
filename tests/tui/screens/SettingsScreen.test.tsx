@@ -235,6 +235,27 @@ describe("SettingsScreen", () => {
       await vi.waitFor(() => expect(lastFrame()).toContain("project config is read-only"));
     });
 
+    it("saves an emptied origin allowlist, which blocks every browser origin", async () => {
+      const origin = "http://localhost:6274";
+      const settings = { ...mockSettings, allowedOrigins: origin };
+      mockSettingsService.getAll.mockReturnValue(settings);
+      mockSettingsService.getKeys.mockReturnValue(
+        Object.keys(settings) as (keyof typeof mockSettings)[]
+      );
+      const { stdin } = render(<SettingsScreen onBack={mockOnBack} initialKey="allowedOrigins" />);
+
+      stdin.write(KEYS.ENTER);
+      await waitForStateUpdate();
+      for (let i = 0; i < origin.length; i++) {
+        stdin.write(KEYS.BACKSPACE);
+        await waitForStateUpdate(5);
+      }
+      stdin.write(KEYS.ENTER);
+      await waitForStateUpdate();
+
+      expect(mockSettingsService.set).toHaveBeenCalledWith("allowedOrigins", "");
+    });
+
     it("should show an error message when saving a setting fails", async () => {
       mockSettingsService.set.mockReturnValueOnce({
         success: false,

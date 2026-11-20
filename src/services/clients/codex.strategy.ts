@@ -24,7 +24,7 @@ export class CodexStrategy extends TomlClientStrategy {
     supportsRealTimeReload: false,
     hasSecondaryConfigPath: false,
     configFormat: "toml",
-    gatewayType: "url-only",
+    gatewayType: "stdio",
   };
 
   readonly paths: ClientPlatformPaths = {
@@ -40,14 +40,6 @@ export class CodexStrategy extends TomlClientStrategy {
       linux: "/usr/local/bin/codex",
     },
   };
-
-  // Override: Codex uses URL-only gateway (no supergateway)
-  buildGatewayConfig(port: number, profileId?: string): ClientServerConfig {
-    const mcpPath = profileId ? `/mcp/${profileId}` : "/mcp";
-    return {
-      url: `http://localhost:${port}${mcpPath}`,
-    };
-  }
 
   protected tomlToStandardConfig(tomlConfig: TOML.JsonMap): ClientMcpConfig {
     const mcpServers: Record<string, ClientServerConfig> = {};

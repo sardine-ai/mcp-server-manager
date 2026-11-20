@@ -53,7 +53,7 @@ export interface DetectedClient {
 
 /** Generic client server configuration */
 export interface ClientServerConfig {
-  command?: string;
+  command?: string | string[]; // OpenCode: executable followed by its arguments
   args?: string[];
   type?: string;
   url?: string;

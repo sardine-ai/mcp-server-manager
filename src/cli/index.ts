@@ -16,6 +16,7 @@ import { registerUtilityCommands } from "./commands/utility.cmd.js";
 import { registerDaemonCommands } from "./commands/daemon.cmd.js";
 import { registerImportExportCommands } from "./commands/import-export.cmd.js";
 import { registerAuthCommands } from "./commands/auth.cmd.js";
+import { registerBridgeCommands } from "./commands/bridge.cmd.js";
 
 /** Package version */
 import { VERSION } from "../shared/version.js";
@@ -50,6 +51,7 @@ function createProgram(): Command {
   registerDaemonCommands(program);
   registerImportExportCommands(program);
   registerAuthCommands(program);
+  registerBridgeCommands(program);
 
   // Default action - show TUI or help
   program.action(async () => {

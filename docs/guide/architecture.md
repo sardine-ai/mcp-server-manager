@@ -37,7 +37,7 @@ Instead of syncing individual servers to each client, mcpsm operates as a **gate
 
 1. **Daemon**: Runs a central `mcpsm` server that listens on `localhost:{port}/mcp`
 2. **Client Connection**: Each client connects to the daemon through a single `mcpsm` server entry
-3. **Gateway**: The `mcpsm` server points to the daemon (via `supergateway` or a direct URL, depending on the client)
+3. **Gateway**: The `mcpsm` server points to the daemon (via `mcpsm bridge`, or a direct URL for Kiro and Zed)
 4. **All Servers Accessible**: All configured servers are accessible through this single gateway
 
 ### Benefits
@@ -154,8 +154,8 @@ When you run `mcpsm clients connect <client>`:
    ```json
    {
      "mcpsm": {
-       "command": "npx",
-       "args": ["-y", "supergateway", "--streamableHttp", "http://localhost:PORT/mcp"]
+       "command": "mcpsm",
+       "args": ["bridge", "http://localhost:PORT/mcp"]
      }
    }
    ```
@@ -215,13 +215,28 @@ The **gateway server** in each client configuration is what connects them:
 ```json
 {
   "mcpsm": {
-    "command": "npx",
-    "args": ["-y", "supergateway", "--streamableHttp", "http://localhost:PORT/mcp"]
+    "command": "mcpsm",
+    "args": ["bridge", "http://localhost:PORT/mcp"]
   }
 }
 ```
 
-This uses `supergateway` to forward all MCP protocol messages to the daemon's gateway endpoint.
+`mcpsm bridge` forwards all MCP messages to the daemon and passes the folder the client started it in. See [Project Folders](#project-folders).
+
+mcpsm writes the absolute path of `mcpsm` when it is on your `PATH`, so GUI clients that do not load your shell profile still find it.
+
+### Project Folders
+
+Local (STDIO) servers such as Serena, jbcontext, or context-mode read their working directory to find the project. The daemon starts one shared instance of each local server in its own folder, which is the wrong project for every client.
+
+`mcpsm bridge` fixes this:
+
+1. The client starts `mcpsm bridge <url>` in the project it has open (Claude Code, Codex, OpenCode, and Gemini do this; Cursor passes `--cwd ${workspaceFolder}`).
+2. The bridge sends that folder to the daemon in the `x-mcpsm-project-dir` header. `/` and your home folder count as "no project".
+3. For that session, tool calls to local servers go to an instance started in the project folder. Instances are started on first use, shared by every session in the same folder, and stopped when the folder's last session ends.
+4. Remote (HTTP/SSE) servers and sessions without a project keep using the daemon's shared instances.
+
+Tool lists come from the shared instances, so clients get them without waiting for project instances to start.
 
 ## Configuration Files
 
@@ -319,11 +334,11 @@ User opens Claude Desktop / Cursor / etc.
         ↓
 Client loads mcpsm gateway server config
         ↓
-supergateway connects to http://localhost:PORT/mcp
+mcpsm bridge connects to http://localhost:PORT/mcp
         ↓
 User selects a tool from any server
         ↓
-Tool request flows: Client → supergateway → mcpsm daemon → actual server
+Tool request flows: Client → mcpsm bridge → mcpsm daemon → actual server
         ↓
 Response flows back through the same path
 ```

@@ -11,7 +11,7 @@ MCP Server Manager (`mcpsm`) is a CLI tool for managing MCP (Model Context Proto
 The system uses a **gateway pattern** for client connections:
 
 - A single `mcpsm` server is added to each connected client's configuration
-- This server uses `supergateway` to proxy all MCP requests to the daemon on `localhost:{port}/mcp`
+- This server runs `mcpsm bridge`, which the client starts in its project folder; it proxies MCP requests to the daemon on `localhost:{port}/mcp` and passes that folder, so local servers run in the project
 - When the port setting is changed, all connected clients are automatically updated
 - Supports real-time config loading for clients without restart (Cursor, Windsurf, VS Code)
 
@@ -127,7 +127,7 @@ Each client has its own config location where the `mcpsm` gateway server is regi
 - **Claude Code**: `~/.claude/claude_code_config.json`
 - **Codex CLI**: `~/.codex/config.toml`
 - **Gemini CLI**: `~/.gemini/settings.json`
-- **Google Antigravity**: `~/.antigravity/mcp_config.json`
+- **Google Antigravity**: `~/.gemini/config/mcp_config.json`
 
 ## Important: TUI + CLI Parity
 

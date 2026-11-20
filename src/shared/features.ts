@@ -293,6 +293,14 @@ export const FEATURES: Feature[] = [
     tuiImplementation: "DaemonScreen.tsx",
     requiredInTui: true,
   },
+  {
+    id: "gateway-bridge",
+    name: "Project-aware stdio bridge (launched by clients)",
+    category: "daemon",
+    cliCommands: ["bridge"],
+    tuiImplementation: null, // Run by MCP clients, not by people
+    requiredInTui: false,
+  },
 
   // === Import/Export ===
   {

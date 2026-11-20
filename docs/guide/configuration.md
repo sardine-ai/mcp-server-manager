@@ -183,8 +183,8 @@ When you connect a client, mcpsm adds this gateway server entry:
 ```json
 {
   "mcpsm": {
-    "command": "npx",
-    "args": ["-y", "supergateway", "--streamableHttp", "http://localhost:PORT/mcp"]
+    "command": "mcpsm",
+    "args": ["bridge", "http://localhost:PORT/mcp"]
   }
 }
 ```

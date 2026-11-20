@@ -3,6 +3,7 @@
  * Google Antigravity is a tool that uses MCP (Model Context Protocol) servers
  */
 
+import fs from "fs";
 import path from "path";
 import { JsonClientStrategy } from "./json-client.strategy.js";
 import type {
@@ -10,7 +11,7 @@ import type {
   ClientCapabilities,
   ClientPlatformPaths,
 } from "../../types/client-strategy.types.js";
-import type { ClientServerConfig } from "../../types/index.js";
+import type { Platform } from "../../types/index.js";
 
 export class AntigravityStrategy extends JsonClientStrategy {
   readonly metadata: ClientMetadata = {
@@ -23,27 +24,32 @@ export class AntigravityStrategy extends JsonClientStrategy {
     supportsRealTimeReload: false,
     hasSecondaryConfigPath: false,
     configFormat: "json",
-    gatewayType: "url-only",
+    gatewayType: "stdio",
   };
 
   readonly paths: ClientPlatformPaths = {
     executable: "antigravity",
     project: ".agents/mcp_config.json",
     primary: {
-      darwin: path.join(this.getHomedir(), ".antigravity/mcp_config.json"),
-      win32: path.join(this.getHomedir(), ".antigravity/mcp_config.json"),
-      linux: path.join(this.getHomedir(), ".antigravity/mcp_config.json"),
+      darwin: path.join(this.getHomedir(), ".gemini/config/mcp_config.json"),
+      win32: path.join(this.getHomedir(), ".gemini/config/mcp_config.json"),
+      linux: path.join(this.getHomedir(), ".gemini/config/mcp_config.json"),
     },
     appBundles: {
       darwin: "/Applications/Antigravity.app",
     },
   };
 
-  buildGatewayConfig(port: number, profileId?: string): ClientServerConfig {
-    const mcpPath = profileId ? `/mcp/${profileId}` : "/mcp";
-    if (this.projectDir) return super.buildGatewayConfig(port, profileId);
-    return {
-      url: `http://localhost:${port}${mcpPath}`,
-    };
+  /** Current builds read ~/.gemini/config, older ones ~/.gemini/antigravity */
+  getPrimaryConfigPath(platform: Platform): string | null {
+    if (this.projectDir) return super.getPrimaryConfigPath(platform);
+    const candidates = ["config", "antigravity"].map((dir) =>
+      path.join(this.getHomedir(), ".gemini", dir, "mcp_config.json")
+    );
+    return (
+      candidates.find((file) => fs.existsSync(file)) ??
+      candidates.find((file) => fs.existsSync(path.dirname(file))) ??
+      candidates[0]
+    );
   }
 }

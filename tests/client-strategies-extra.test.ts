@@ -76,7 +76,8 @@ foo = "bar"
     expect(updated).toEqual({
       mcpServers: {
         "mcpsm-dev": {
-          url: "http://localhost:8850/mcp/dev",
+          command: "mcpsm",
+          args: ["bridge", "http://localhost:8850/mcp/dev"],
         },
       },
     });
@@ -118,13 +119,16 @@ foo = "bar"
       })
     ).toBe(true);
     expect(fs.existsSync(configPath)).toBe(true);
-    expect(strategy.readConfig()?.mcpServers?.mcpsm.url).toBe("http://localhost:8850/mcp");
+    expect(strategy.readConfig()?.mcpServers?.mcpsm.args).toEqual([
+      "bridge",
+      "http://localhost:8850/mcp",
+    ]);
   });
 
   it("handles OpenCode XDG config discovery, install detection, and gateway shape", () => {
     process.env.XDG_CONFIG_HOME = path.join(tempDir, "xdg");
     const strategy = new OpenCodeStrategy();
-    const configPath = path.join(process.env.XDG_CONFIG_HOME, "opencode", "config.json");
+    const configPath = path.join(process.env.XDG_CONFIG_HOME, "opencode", "opencode.json");
 
     expect(strategy.readConfig()).toBeNull();
     expect(strategy.isInstalled(process.platform)).toBe(false);
@@ -132,8 +136,8 @@ foo = "bar"
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     expect(strategy.isInstalled(process.platform)).toBe(true);
     expect(strategy.buildGatewayConfig(8850)).toEqual({
-      type: "remote",
-      url: "http://localhost:8850/mcp",
+      type: "local",
+      command: ["mcpsm", "bridge", "http://localhost:8850/mcp"],
     });
 
     const config = strategy.addGateway({ mcp: { docs: { url: "https://docs.test" } } }, 8850);
@@ -141,10 +145,11 @@ foo = "bar"
       $schema: "https://opencode.ai/config.json",
       mcp: {
         docs: { url: "https://docs.test" },
-        mcpsm: { type: "remote", url: "http://localhost:8850/mcp" },
+        mcpsm: { type: "local", command: ["mcpsm", "bridge", "http://localhost:8850/mcp"] },
       },
     });
     expect(strategy.writeConfig(config)).toBe(true);
+    expect(fs.existsSync(configPath)).toBe(true);
     expect(strategy.readConfig()).toEqual(config);
     expect(strategy.hasGateway(config)).toBe(true);
     expect(strategy.getServerCount()).toBe(2);
@@ -154,7 +159,7 @@ foo = "bar"
   it("returns null or false for malformed OpenCode config files", () => {
     process.env.XDG_CONFIG_HOME = path.join(tempDir, "xdg");
     const strategy = new OpenCodeStrategy();
-    const configPath = path.join(process.env.XDG_CONFIG_HOME, "opencode", "config.json");
+    const configPath = path.join(process.env.XDG_CONFIG_HOME, "opencode", "opencode.json");
 
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     fs.writeFileSync(configPath, "{ invalid");

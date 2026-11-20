@@ -1,6 +1,6 @@
 /**
  * OpenCode Strategy - Strategy for OpenCode CLI
- * OpenCode uses 'mcp' key for servers and has multiple possible config locations
+ * OpenCode keeps servers under 'mcp' (V1) or 'mcp.servers' (V2) in opencode.json(c)
  */
 
 import fs from "fs";
@@ -13,6 +13,14 @@ import type {
   ClientPlatformPaths,
 } from "../../types/client-strategy.types.js";
 import type { ClientMcpConfig, ClientServerConfig, Platform } from "../../types/index.js";
+
+type Servers = Record<string, ClientServerConfig>;
+
+/** V2 groups servers under mcp.servers; a V1 server named "servers" has a type */
+function isV2Mcp(mcp: unknown): mcp is { servers: Servers } {
+  const servers = (mcp as { servers?: unknown } | undefined)?.servers;
+  return !!servers && typeof servers === "object" && typeof (servers as Servers).type !== "string";
+}
 
 export class OpenCodeStrategy extends JsonClientStrategy {
   private static readonly OPENCODE_SCHEMA_URL = "https://opencode.ai/config.json";
@@ -27,17 +35,16 @@ export class OpenCodeStrategy extends JsonClientStrategy {
     supportsRealTimeReload: false,
     hasSecondaryConfigPath: false,
     configFormat: "json",
-    gatewayType: "url-only",
+    gatewayType: "stdio",
   };
 
   readonly paths: ClientPlatformPaths = {
     executable: "opencode",
     project: "opencode.json",
-    // Primary path is the XDG standard location: $HOME/.config/opencode/config.json
     primary: {
-      darwin: path.join(this.getHomedir(), ".config", "opencode", "config.json"),
-      win32: path.join(this.getHomedir(), ".config", "opencode", "config.json"),
-      linux: path.join(this.getHomedir(), ".config", "opencode", "config.json"),
+      darwin: path.join(this.getHomedir(), ".config", "opencode", "opencode.json"),
+      win32: path.join(this.getHomedir(), ".config", "opencode", "opencode.json"),
+      linux: path.join(this.getHomedir(), ".config", "opencode", "opencode.json"),
     },
     binaryPaths: {
       darwin: "/usr/local/bin/opencode",
@@ -49,73 +56,42 @@ export class OpenCodeStrategy extends JsonClientStrategy {
     return this.getWriteConfigPath();
   }
 
-  // === Server Container Access (uses 'mcp' not 'mcpServers') ===
+  // === Server Container Access ===
 
-  protected getServersFromConfig(
-    config: ClientMcpConfig
-  ): Record<string, ClientServerConfig> | undefined {
-    return config.mcp;
+  protected getServersFromConfig(config: ClientMcpConfig): Servers | undefined {
+    return isV2Mcp(config.mcp) ? config.mcp.servers : config.mcp;
   }
 
-  protected setServersInConfig(
-    config: ClientMcpConfig,
-    servers: Record<string, ClientServerConfig>
-  ): ClientMcpConfig {
-    return { ...config, $schema: OpenCodeStrategy.OPENCODE_SCHEMA_URL, mcp: servers };
+  /** Keeps the file's shape; new files use the V1 shape, which V2 also accepts */
+  protected setServersInConfig(config: ClientMcpConfig, servers: Servers): ClientMcpConfig {
+    const mcp = isV2Mcp(config.mcp) ? { ...config.mcp, servers } : servers;
+    return { ...config, $schema: OpenCodeStrategy.OPENCODE_SCHEMA_URL, mcp: mcp as Servers };
   }
 
+  /** OpenCode starts local servers in the workspace, which the bridge passes on */
   buildGatewayConfig(port: number, profileId?: string): ClientServerConfig {
-    const mcpPath = profileId ? `/mcp/${profileId}` : "/mcp";
-    return {
-      type: "remote",
-      url: `http://localhost:${port}${mcpPath}`,
-    };
+    const { command, args } = this.buildBridgeConfig(port, profileId);
+    return { type: "local", command: [command, ...args] };
   }
 
   /**
-   * Get all possible config paths in search order:
-   * 1. $XDG_CONFIG_HOME/opencode/config.json (or $HOME/.config/opencode/config.json)
-   * 2. $HOME/.opencode.json (legacy fallback)
+   * Config paths in search order. Global: $XDG_CONFIG_HOME/opencode (or ~/.config/opencode)
+   * opencode.json, then opencode.jsonc.
    */
   private getConfigSearchPaths(): string[] {
-    if (this.projectDir) {
-      return [
-        path.join(this.projectDir, "opencode.json"),
-        path.join(this.projectDir, "opencode.jsonc"),
-      ];
-    }
-    const homedir = this.getHomedir();
-    const xdgConfigHome = process.env.XDG_CONFIG_HOME || path.join(homedir, ".config");
-
-    return [
-      path.join(xdgConfigHome, "opencode", "config.json"),
-      path.join(homedir, ".opencode.json"),
-    ];
+    const dir =
+      this.projectDir ??
+      path.join(process.env.XDG_CONFIG_HOME || path.join(this.getHomedir(), ".config"), "opencode");
+    return [path.join(dir, "opencode.json"), path.join(dir, "opencode.jsonc")];
   }
 
-  /**
-   * Find the first existing config file path
-   */
   private findExistingConfigPath(): string | null {
-    for (const configPath of this.getConfigSearchPaths()) {
-      if (fs.existsSync(configPath)) {
-        return configPath;
-      }
-    }
-    return null;
+    return this.getConfigSearchPaths().find((configPath) => fs.existsSync(configPath)) ?? null;
   }
 
-  /**
-   * Get the path to use for writing config
-   * Uses existing path if found, otherwise uses XDG standard path
-   */
+  /** Existing config file, else opencode.json */
   private getWriteConfigPath(): string {
-    const existingPath = this.findExistingConfigPath();
-    if (existingPath) {
-      return existingPath;
-    }
-    // Default to XDG standard path ($HOME/.config/opencode/config.json)
-    return this.getConfigSearchPaths()[0];
+    return this.findExistingConfigPath() ?? this.getConfigSearchPaths()[0];
   }
 
   /**
@@ -133,31 +109,18 @@ export class OpenCodeStrategy extends JsonClientStrategy {
     return super.isInstalled(platform);
   }
 
-  /**
-   * Override readConfig to check all possible config locations
-   */
   readConfig(): ClientMcpConfig | null {
     const configPath = this.findExistingConfigPath();
-
-    if (!configPath) {
-      return null;
-    }
+    if (!configPath) return null;
 
     try {
-      const data = fs.readFileSync(configPath, "utf8");
-      if (this.projectDir) return parseJsonWithComments(data);
-      const config: unknown = JSON.parse(data);
-      if (!config || typeof config !== "object" || Array.isArray(config)) return null;
-      return { ...config };
+      return parseJsonWithComments(fs.readFileSync(configPath, "utf8"));
     } catch (error) {
       this.log.debug(`Failed to read config from ${configPath}:`, error);
       return null;
     }
   }
 
-  /**
-   * Override writeConfig to use appropriate config location
-   */
   writeConfig(config: ClientMcpConfig): boolean {
     const configPath = this.getWriteConfigPath();
 

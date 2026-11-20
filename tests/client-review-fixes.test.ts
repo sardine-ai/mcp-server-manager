@@ -108,12 +108,22 @@ describe("Client review regressions", () => {
     }
   );
 
-  it("guards the actual OpenCode legacy file rather than its default path", () => {
+  it("leaves the legacy ~/.opencode.json alone and writes opencode.json", () => {
     const legacyPath = path.join(scratchHome, ".opencode.json");
     write(legacyPath, "{broken");
     const strategy = new OpenCodeStrategy();
-    expect(strategy.connect(8850).success).toBe(false);
+    expect(strategy.connect(8850).success).toBe(true);
     expect(fs.readFileSync(legacyPath, "utf8")).toBe("{broken");
+    expect(
+      fs.readFileSync(path.join(scratchHome, ".config/opencode/opencode.json"), "utf8")
+    ).toContain("localhost:8850/mcp");
+  });
+
+  it("does not overwrite an unreadable global opencode.json", () => {
+    const configPath = path.join(scratchHome, ".config/opencode/opencode.json");
+    write(configPath, "{broken");
+    expect(new OpenCodeStrategy().connect(8850).success).toBe(false);
+    expect(fs.readFileSync(configPath, "utf8")).toBe("{broken");
   });
 
   it.each(["cursor", "vscode", "codex", "zed", "opencode"] satisfies ClientId[])(

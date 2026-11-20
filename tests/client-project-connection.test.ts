@@ -116,17 +116,20 @@ describe("Project client connections", () => {
     expect(TOML.parse(fs.readFileSync(configPath, "utf8"))).toEqual(original);
   });
 
-  it("replaces a project Codex stdio gateway with HTTP without retaining its command", () => {
+  it("replaces a project Codex HTTP gateway with the bridge without retaining its url", () => {
     const configPath = path.join(project, ".codex", "config.toml");
     fs.mkdirSync(path.dirname(configPath));
     fs.writeFileSync(
       configPath,
-      TOML.stringify({ mcp_servers: { "mcpsm-dev": { command: "old", args: ["old"] } } })
+      TOML.stringify({ mcp_servers: { "mcpsm-dev": { url: "http://localhost:8850/mcp/dev" } } })
     );
     expect(service.connectClient("codex", "dev").success).toBe(true);
     const config = TOML.parse(fs.readFileSync(configPath, "utf8"));
     expect(config.mcp_servers).toEqual({
-      "mcpsm-dev": { url: expect.stringContaining("/mcp/dev") },
+      "mcpsm-dev": {
+        command: expect.stringMatching(/mcpsm(\.cmd)?$/i),
+        args: ["bridge", "http://localhost:8850/mcp/dev"],
+      },
     });
   });
 

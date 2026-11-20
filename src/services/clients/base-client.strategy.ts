@@ -101,7 +101,11 @@ export abstract class BaseClientStrategy implements IClientStrategy {
     if (binaryPath && fs.existsSync(binaryPath)) return true;
 
     const executable = this.paths.executable;
-    if (!executable) return false;
+    return !!executable && !!this.findExecutable(executable, platform);
+  }
+
+  /** Absolute path of an executable on PATH, or null */
+  protected findExecutable(executable: string, platform: Platform): string | null {
     const extensions =
       platform === "win32" ? (process.env.PATHEXT || ".EXE;.CMD;.BAT;.COM").split(";") : [""];
     const directories = (process.env.PATH || "").split(platform === "win32" ? ";" : ":");
@@ -115,11 +119,11 @@ export abstract class BaseClientStrategy implements IClientStrategy {
         try {
           if (!fs.statSync(binary).isFile()) continue;
           fs.accessSync(binary, platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK);
-          return true;
+          return binary;
         } catch {}
       }
     }
-    return false;
+    return null;
   }
 
   // === Configuration I/O (Abstract - must be implemented by subclasses) ===
@@ -166,7 +170,21 @@ export abstract class BaseClientStrategy implements IClientStrategy {
 
   // === Gateway Management ===
 
-  abstract buildGatewayConfig(port: number, profileId?: string): ClientServerConfig;
+  /**
+   * `mcpsm bridge`, which the client starts in its project folder so the gateway runs
+   * local servers there. Absolute path: GUI clients often lack the shell's PATH.
+   */
+  protected buildBridgeConfig(port: number, profileId?: string) {
+    const mcpPath = profileId ? `/mcp/${profileId}` : "/mcp";
+    return {
+      command: this.findExecutable("mcpsm", this.getPlatform()) ?? "mcpsm",
+      args: ["bridge", `http://localhost:${port}${mcpPath}`],
+    };
+  }
+
+  buildGatewayConfig(port: number, profileId?: string): ClientServerConfig {
+    return this.buildBridgeConfig(port, profileId);
+  }
 
   protected getGatewayKey(profileId?: string): string {
     return profileId ? `mcpsm-${profileId}` : "mcpsm";

@@ -186,7 +186,7 @@ describe("Gateway port changes", () => {
       mcp_servers: {
         other,
         disabled: { enabled: false },
-        mcpsm: { url: "http://localhost:9000/mcp", enabled: false },
+        mcpsm: { command: "mcpsm", args: ["bridge", "http://localhost:9000/mcp"], enabled: false },
       },
     });
   });
@@ -203,9 +203,10 @@ describe("Gateway port changes", () => {
     zedConfig.context_servers["mcpsm-dev"].headers = { "X-Custom": "keep" };
     fs.writeFileSync(zedPath, JSON.stringify(zedConfig));
     expect((await changeGatewayPort(9000)).warnings).toEqual([]);
-    expect(JSON.parse(fs.readFileSync(openCodePath, "utf8")).mcp["mcpsm-dev"]).toMatchObject({
+    expect(JSON.parse(fs.readFileSync(openCodePath, "utf8")).mcp["mcpsm-dev"]).toEqual({
       enabled: false,
-      url: "http://localhost:9000/mcp/dev",
+      type: "local",
+      command: ["mcpsm", "bridge", "http://localhost:9000/mcp/dev"],
     });
     expect(JSON.parse(fs.readFileSync(zedPath, "utf8")).context_servers["mcpsm-dev"]).toMatchObject(
       { headers: { "X-Custom": "keep" }, url: "http://localhost:9000/mcp/dev" }

@@ -57,11 +57,6 @@ export class VSCodeStrategy extends JsonClientStrategy {
 
   // Override to include 'type' field required by VS Code
   buildGatewayConfig(port: number, profileId?: string): ClientServerConfig {
-    const mcpPath = profileId ? `/mcp/${profileId}` : "/mcp";
-    return {
-      type: "stdio",
-      command: "npx",
-      args: ["-y", "supergateway", "--streamableHttp", `http://localhost:${port}${mcpPath}`],
-    };
+    return { type: "stdio", ...this.buildBridgeConfig(port, profileId) };
   }
 }

@@ -146,7 +146,9 @@ async function handleStart(
   // Daemon mode
   const result = await daemonService.startDaemon();
   if (result.success) {
-    console.log(`${colors.green}✓${colors.reset} Gateway started (PID: ${result.pid})`);
+    console.log(
+      `${colors.green}✓${colors.reset} Gateway started${result.pid ? ` (PID: ${result.pid})` : ""}`
+    );
     if (selectedServers.length > 0) {
       console.log(`${colors.gray}Servers: ${selectedServers.join(", ")}${colors.reset}`);
     } else {

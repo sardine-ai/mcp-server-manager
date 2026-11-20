@@ -72,6 +72,8 @@ mcpsm daemon start --foreground
 5. PID is saved for later management
 6. Connected clients can now access all running servers through the gateway
 
+With [auto-start](#daemon-startup) enabled, the daemon is started through the LaunchAgent (`launchctl`) or systemd user service instead of a separate process, so the two never race for the port.
+
 ---
 
 ## daemon stop
@@ -86,6 +88,8 @@ This gracefully shuts down:
 
 - All running MCP server processes
 - The gateway HTTP server
+
+With auto-start enabled, the LaunchAgent or systemd service is stopped first so it doesn't respawn the daemon. It starts again at your next login.
 
 ---
 

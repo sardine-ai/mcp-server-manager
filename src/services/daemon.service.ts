@@ -534,6 +534,8 @@ export class DaemonService {
     <dict>
         <key>MCPSM_DAEMON</key>
         <string>1</string>
+        <key>MCP_MANAGER_CONFIG_DIR</key>
+        <string>${this.configDir}</string>
     </dict>
 </dict>
 </plist>`;
@@ -556,6 +558,9 @@ Type=simple
 ExecStart=${nodePath} ${finalCliPath} daemon start --foreground
 Restart=always
 Environment=MCPSM_DAEMON=1
+Environment="MCP_MANAGER_CONFIG_DIR=${this.configDir}"
+StandardOutput=append:${this.logFile}
+StandardError=append:${this.logFile}
 
 [Install]
 WantedBy=default.target`;
@@ -568,7 +573,7 @@ WantedBy=default.target`;
    * service manager call failed.
    */
   private runServiceManager(action: "start" | "stop"): boolean {
-    if (!this.isStartupEnabled()) return false;
+    if (!this.startupServiceRunsThisConfig()) return false;
     const run = (command: string) => execSync(command, { stdio: "ignore" });
     try {
       if (process.platform === "darwin") {
@@ -589,6 +594,23 @@ WantedBy=default.target`;
       return true;
     } catch (error) {
       log.debug(`Service manager ${action} failed:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * The LaunchAgent/systemd unit has one fixed name, so it may belong to another config
+   * dir. It writes to its config dir's log file, so that path identifies the owner.
+   */
+  private startupServiceRunsThisConfig(): boolean {
+    const file = process.platform === "darwin" ? this.getLaunchAgentPath() : this.getSystemdPath();
+    try {
+      const content = fs.readFileSync(file, "utf8");
+      return (
+        content.includes(`<string>${this.logFile}</string>`) ||
+        content.includes(`append:${this.logFile}\n`)
+      );
+    } catch {
       return false;
     }
   }

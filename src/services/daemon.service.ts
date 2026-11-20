@@ -239,6 +239,10 @@ export class DaemonService {
       }
     }
 
+    if (this.runServiceManager("start")) {
+      return { success: true };
+    }
+
     // Find the CLI path - using import.meta.url for ES modules
     const currentDir = path.dirname(new URL(import.meta.url).pathname);
     const cliPath = path.join(currentDir, "..", "..", "bin", "cli.js");
@@ -285,6 +289,9 @@ export class DaemonService {
     const configService = getConfigService();
     const port = configService.getPort();
     const pidsToKill = new Set<number>();
+
+    // Unload the auto-start service first so it doesn't respawn what we kill below
+    this.runServiceManager("stop");
 
     // Only stop processes that are bound to the daemon port
     const portPids = this.findProcessesByPort(port);
@@ -552,6 +559,38 @@ Environment=MCPSM_DAEMON=1
 
 [Install]
 WantedBy=default.target`;
+  }
+
+  /**
+   * With auto-start installed, launchd (KeepAlive) or systemd (Restart=always) owns the
+   * gateway and respawns it when killed, so start/stop must go through it; otherwise a
+   * second instance races it for the port. Returns false when there is no service or the
+   * service manager call failed.
+   */
+  private runServiceManager(action: "start" | "stop"): boolean {
+    if (!this.isStartupEnabled()) return false;
+    const run = (command: string) => execSync(command, { stdio: "ignore" });
+    try {
+      if (process.platform === "darwin") {
+        const target = `gui/${os.userInfo().uid}`;
+        if (action === "stop") {
+          run(`launchctl bootout ${target}/com.mcpsm.gateway`);
+        } else {
+          try {
+            run(`launchctl bootstrap ${target} "${this.getLaunchAgentPath()}"`);
+          } catch {
+            // Already loaded; kickstart below starts it if it isn't running
+          }
+          run(`launchctl kickstart ${target}/com.mcpsm.gateway`);
+        }
+      } else {
+        run(`systemctl --user ${action} mcpsm`);
+      }
+      return true;
+    } catch (error) {
+      log.debug(`Service manager ${action} failed:`, error);
+      return false;
+    }
   }
 
   /** Check if startup is enabled */

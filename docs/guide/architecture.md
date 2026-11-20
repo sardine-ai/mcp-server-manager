@@ -37,7 +37,7 @@ Instead of syncing individual servers to each client, mcpsm operates as a **gate
 
 1. **Daemon**: Runs a central `mcpsm` server that listens on `localhost:{port}/mcp`
 2. **Client Connection**: Each client connects to the daemon through a single `mcpsm` server entry
-3. **Gateway**: The `mcpsm` server points to the daemon (via `supergateway` or a direct URL, depending on the client)
+3. **Gateway**: The `mcpsm` server points to the daemon (via `mcpsm bridge`, or a direct URL for Kiro and Zed)
 4. **All Servers Accessible**: All configured servers are accessible through this single gateway
 
 ### Benefits
@@ -154,8 +154,8 @@ When you run `mcpsm clients connect <client>`:
    ```json
    {
      "mcpsm": {
-       "command": "npx",
-       "args": ["-y", "supergateway", "--streamableHttp", "http://localhost:PORT/mcp"]
+       "command": "/path/to/node",
+       "args": ["/path/to/mcp-server-manager/bin/cli.js", "bridge", "http://localhost:PORT/mcp"]
      }
    }
    ```
@@ -215,13 +215,37 @@ The **gateway server** in each client configuration is what connects them:
 ```json
 {
   "mcpsm": {
-    "command": "npx",
-    "args": ["-y", "supergateway", "--streamableHttp", "http://localhost:PORT/mcp"]
+    "command": "/path/to/node",
+    "args": ["/path/to/mcp-server-manager/bin/cli.js", "bridge", "http://localhost:PORT/mcp"]
   }
 }
 ```
 
-This uses `supergateway` to forward all MCP protocol messages to the daemon's gateway endpoint.
+`mcpsm bridge` forwards all MCP messages to the daemon and passes the folder the client started it in. See [Project Folders](#project-folders).
+
+This runs `mcpsm bridge <url>`. mcpsm writes absolute paths to Node and its CLI script, so GUI clients that do not load your shell profile can start it without `node` or `mcpsm` on their `PATH`.
+
+### Project Folders
+
+Local (STDIO) servers such as Serena, jbcontext, or context-mode read their working directory to find the project. The daemon starts one shared instance of each local server in its own folder, which is the wrong project for every client.
+
+`mcpsm bridge` fixes this:
+
+1. The client starts `mcpsm bridge <url>` in the project it has open (Claude Code, Codex, OpenCode, and Gemini do this; Cursor passes `--cwd ${workspaceFolder}`).
+2. The bridge sends that folder to the daemon in the `x-mcpsm-project-dir` header. `/` and your home folder count as "no project".
+3. The daemon starts every selected local server in the project folder when the first session for that folder begins. These instances are shared by every session in the folder and stopped when its last session ends. Tool calls to local servers run on them.
+4. Remote (HTTP/SSE) servers and sessions without a project keep using the daemon's shared instances.
+
+Until the project's instances have started, the session lists the shared instances' tools, so clients do not wait. Then the daemon sends `notifications/tools/list_changed`, and the session lists the tools the project's instances offer, which can differ: Serena started in a project leaves out `activate_project` and `get_current_config`. Calling a tool from the earlier list that the project's instance lacks returns an error saying so. A call to a local server's tool waits for the project's instances; a call to a remote server's tool does not.
+
+### Request Checks
+
+The gateway listens on `127.0.0.1` only. It also rejects (HTTP 403):
+
+- Requests whose `Host` is not `localhost`, `127.0.0.1`, or `[::1]`, which blocks DNS rebinding.
+- Requests with an `Origin` header not in the `allowedOrigins` setting (empty by default), so web pages open in your browser cannot call your tools. MCP clients that are not browsers send no `Origin`.
+
+CORS headers are sent only to allowlisted origins.
 
 ## Configuration Files
 
@@ -319,11 +343,11 @@ User opens Claude Desktop / Cursor / etc.
         ↓
 Client loads mcpsm gateway server config
         ↓
-supergateway connects to http://localhost:PORT/mcp
+mcpsm bridge connects to http://localhost:PORT/mcp
         ↓
 User selects a tool from any server
         ↓
-Tool request flows: Client → supergateway → mcpsm daemon → actual server
+Tool request flows: Client → mcpsm bridge → mcpsm daemon → actual server
         ↓
 Response flows back through the same path
 ```

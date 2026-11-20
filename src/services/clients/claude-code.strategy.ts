@@ -9,7 +9,6 @@ import type {
   ClientCapabilities,
   ClientPlatformPaths,
 } from "../../types/client-strategy.types.js";
-import type { ClientServerConfig } from "../../types/index.js";
 
 export class ClaudeCodeStrategy extends JsonClientStrategy {
   readonly metadata: ClientMetadata = {
@@ -22,7 +21,7 @@ export class ClaudeCodeStrategy extends JsonClientStrategy {
     supportsRealTimeReload: false,
     hasSecondaryConfigPath: false,
     configFormat: "json",
-    gatewayType: "url-only",
+    gatewayType: "stdio",
   };
 
   readonly paths: ClientPlatformPaths = {
@@ -37,13 +36,4 @@ export class ClaudeCodeStrategy extends JsonClientStrategy {
       darwin: "/Applications/Claude.app", // Claude Code shares detection with Claude Desktop
     },
   };
-
-  // Claude Code supports direct HTTP connections without supergateway.
-  buildGatewayConfig(port: number, profileId?: string): ClientServerConfig {
-    const mcpPath = profileId ? `/mcp/${profileId}` : "/mcp";
-    return {
-      type: "http",
-      url: `http://localhost:${port}${mcpPath}`,
-    };
-  }
 }

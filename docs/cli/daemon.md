@@ -271,13 +271,21 @@ When you connect clients using `mcpsm clients connect`, each client gets a gatew
 ```json
 {
   "mcpsm": {
-    "command": "npx",
-    "args": ["mcp-server-manager", "daemon", "start"],
-    "env": {
-      "MCP_GATEWAY_URL": "http://localhost:{port}/mcp"
-    }
+    "command": "/path/to/node",
+    "args": ["/path/to/mcp-server-manager/bin/cli.js", "bridge", "http://localhost:{port}/mcp"]
   }
 }
 ```
 
 Keep the daemon running so clients can reach all your servers through the gateway.
+
+## bridge
+
+Stdio bridge that clients start; you do not run it yourself. It forwards MCP messages to the gateway and passes the folder it was started in, so local servers run in the client's project. See [Project Folders](/guide/architecture#project-folders).
+
+```bash
+mcpsm bridge <url> [--cwd <dir>]
+```
+
+- `<url>` - Gateway endpoint, such as `http://localhost:8850/mcp` or `http://localhost:8850/mcp/<profile>`
+- `--cwd <dir>` - Project folder, for clients that do not start servers in it (Cursor passes `${workspaceFolder}`). Ignored if it is not an existing absolute folder.

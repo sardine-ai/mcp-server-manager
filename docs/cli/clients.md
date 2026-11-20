@@ -58,7 +58,7 @@ The scope controls the client gateway entry. MCPSM profiles, servers, and daemon
 MCP Server Manager uses a **gateway pattern** for client connections:
 
 - A single `mcpsm` server is added to each connected client's configuration
-- This server points to `localhost:{port}/mcp` (via `supergateway` or direct URL, depending on the client)
+- This server points to `localhost:{port}/mcp` (via `mcpsm bridge`, or a direct URL for Kiro and Zed)
 - All your configured servers are accessible through this single gateway
 - When the port is changed, all connected clients are automatically updated
 

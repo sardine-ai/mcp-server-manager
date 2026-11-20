@@ -23,7 +23,7 @@ export class CursorStrategy extends JsonClientStrategy {
     supportsRealTimeReload: true,
     hasSecondaryConfigPath: true,
     configFormat: "json",
-    gatewayType: "url-only",
+    gatewayType: "stdio",
   };
 
   readonly paths: ClientPlatformPaths = {
@@ -46,11 +46,9 @@ export class CursorStrategy extends JsonClientStrategy {
     },
   };
 
-  // Cursor supports direct URL connections without supergateway.
+  // Cursor expands ${workspaceFolder}; the bridge falls back to its cwd when it is not a project
   buildGatewayConfig(port: number, profileId?: string): ClientServerConfig {
-    const mcpPath = profileId ? `/mcp/${profileId}` : "/mcp";
-    return {
-      url: `http://localhost:${port}${mcpPath}`,
-    };
+    const bridge = this.buildBridgeConfig(port, profileId);
+    return { ...bridge, args: [...bridge.args, "--cwd", "${workspaceFolder}"] };
   }
 }

@@ -15,6 +15,7 @@ const log = createLogger("SettingsService");
 const DEFAULT_SETTINGS: Settings = {
   port: 8850,
   editor: process.env.EDITOR || process.env.VISUAL || "vi",
+  allowedOrigins: "",
 };
 
 /** Internal settings (not exposed in Settings interface, kept for future expansion) */
@@ -32,7 +33,18 @@ const SETTINGS_INFO: SettingsInfo = {
     type: "string",
     default: "vi",
   },
+  allowedOrigins: {
+    description:
+      "Browser origins allowed to call the gateway, comma-separated (e.g. http://localhost:6274). Clients that are not browsers need none.",
+    type: "string",
+    default: "",
+  },
 };
+
+/** Allowed browser origins, read from disk so a running daemon sees changes at once */
+export function getAllowedOrigins(): string[] {
+  return new SettingsService().get("allowedOrigins").split(",").filter(Boolean);
+}
 
 /** Settings service class */
 export class SettingsService {
@@ -106,6 +118,22 @@ export class SettingsService {
     if (key === "port") {
       const validation = validatePort(Number(parsedValue));
       if (!validation.valid) return { success: false, error: validation.error };
+    }
+    if (key === "allowedOrigins") {
+      const origins = String(parsedValue)
+        .split(/[\s,]+/)
+        .filter(Boolean);
+      const invalid = origins.find((origin) => {
+        try {
+          return new URL(origin).origin !== origin;
+        } catch {
+          return true;
+        }
+      });
+      if (invalid) {
+        return { success: false, error: `Not an origin (scheme://host[:port]): ${invalid}` };
+      }
+      parsedValue = origins.join(",") as Settings[K];
     }
     this.settings[key] = parsedValue;
     this.save();

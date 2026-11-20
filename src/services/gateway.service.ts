@@ -28,13 +28,54 @@ import { getConfigService } from "./config.service.js";
 import { getAuthService } from "./auth.service.js";
 import { getEnvironmentService } from "./environment.service.js";
 import { getProfileService } from "./profile.service.js";
+import { getAllowedOrigins } from "./settings.service.js";
 import { createTransportAuthProvider } from "./oauth-transport.provider.js";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createLogger } from "../shared/logger.js";
 import { VERSION } from "../shared/version.js";
 import type { LocalServer, RemoteServer } from "../types/index.js";
 
 const logger = createLogger("GatewayService");
+
+/** Header `mcpsm bridge` uses to send the client's project folder (URI-encoded). */
+export const PROJECT_DIR_HEADER = "x-mcpsm-project-dir";
+
+/**
+ * First candidate that is an existing absolute folder. "/" and the home folder are
+ * skipped: GUI clients start servers there when no project is open.
+ */
+export function resolveProjectDir(candidates: (string | undefined)[]): string | undefined {
+  for (const candidate of candidates) {
+    if (!candidate || !path.isAbsolute(candidate)) continue;
+    const dir = path.resolve(candidate);
+    if (dir === path.parse(dir).root || dir === os.homedir()) continue;
+    try {
+      if (fs.statSync(dir).isDirectory()) return dir;
+    } catch {}
+  }
+  return undefined;
+}
+
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Why a request may not reach the gateway, or null if it may. Blocks DNS rebinding
+ * (Host must be local) and web pages (an Origin must be allowlisted). MCP clients
+ * that are not browsers send no Origin.
+ */
+export function rejectRequestSource(host?: string, origin?: string): string | null {
+  let hostname: string | undefined;
+  try {
+    hostname = host ? new URL(`http://${host}`).hostname : undefined;
+  } catch {}
+  if (!hostname || !LOCAL_HOSTNAMES.has(hostname)) return `Host not allowed: ${host ?? "(none)"}`;
+  if (origin !== undefined && !getAllowedOrigins().includes(origin)) {
+    return `Origin not allowed: ${origin}. Allow it with: mcpsm settings set allowedOrigins ${origin}`;
+  }
+  return null;
+}
 
 type RemoteTransport = SSEClientTransport | StreamableHTTPClientTransport;
 
@@ -66,12 +107,21 @@ async function closeServerConnection(server: ConnectedServer): Promise<void> {
 interface SessionEntry {
   transport: StreamableHTTPServerTransport;
   server: Server;
+  projectDir?: string;
 }
 
 interface ProfileView {
   profileId: string;
   toolToServerMap: Map<string, string>;
   aggregatedTools: Tool[];
+}
+
+/** Local servers started in one project folder, shared by that folder's sessions */
+interface ProjectEntry {
+  sessions: number;
+  servers: Map<string, ConnectedServer>; // a new map on each (re)start
+  ready: boolean; // every server has started or failed
+  whenReady: Promise<void>;
 }
 
 interface GatewayState {
@@ -84,6 +134,8 @@ interface GatewayState {
   aggregatedTools: Tool[];
   profileViews: Map<string, ProfileView>;
   activeSelection: Set<string> | null;
+  localServers: LocalServer[]; // selected local servers, also started in each open project
+  projects: Map<string, ProjectEntry>; // projectDir -> local servers running in it
 }
 
 const createGatewayState = (): GatewayState => ({
@@ -96,6 +148,8 @@ const createGatewayState = (): GatewayState => ({
   aggregatedTools: [],
   profileViews: new Map(),
   activeSelection: null,
+  localServers: [],
+  projects: new Map(),
 });
 
 let gatewayState: GatewayState = createGatewayState();
@@ -183,12 +237,15 @@ async function reconnectServer(serverId: string): Promise<void> {
 /**
  * Connect to a local STDIO-based MCP server
  */
-async function connectLocalServer(server: LocalServer): Promise<ConnectedServer | null> {
+async function connectLocalServer(
+  server: LocalServer,
+  cwd?: string
+): Promise<ConnectedServer | null> {
   const configService = getConfigService();
   const envService = getEnvironmentService();
 
   try {
-    logger.info(`Connecting to local server: ${server.name}`);
+    logger.info(`Connecting to local server: ${server.name}${cwd ? ` in ${cwd}` : ""}`);
 
     // Use shell wrapping to ensure PATH resolution
     // This ensures commands like npx, uvx are found even with limited PATH
@@ -207,7 +264,11 @@ async function connectLocalServer(server: LocalServer): Promise<ConnectedServer 
     const transport = new StdioClientTransport({
       command: shellCommand, // e.g., "/bin/zsh" or "/bin/bash"
       args: ["-l", "-c", wrappedCommand], // -l = login shell (loads full PATH)
-      env: { ...process.env, ...(server.env || {}) } as Record<string, string>,
+      env: { ...process.env, ...(server.env || {}), ...(cwd && { PWD: cwd }) } as Record<
+        string,
+        string
+      >,
+      cwd,
     });
 
     const client = new Client({ name: "mcpsm-gateway", version: VERSION }, { capabilities: {} });
@@ -315,6 +376,85 @@ async function connectRemoteServer(server: RemoteServer): Promise<ConnectedServe
   }
 }
 
+function closeServers(servers: Map<string, ConnectedServer>): Promise<unknown> {
+  return Promise.allSettled([...servers.values()].map(closeServerConnection));
+}
+
+/**
+ * (Re)starts every selected local server in the project and closes the previous ones.
+ * Sessions list the shared tools until then, so they are told when the project's are ready.
+ */
+// ponytail: all selected local servers start per open project and stop with its last session.
+// Sessions dropped without a DELETE keep theirs until the next refresh/stop.
+function startProjectServers(projectDir: string, entry: ProjectEntry): Promise<unknown> {
+  const previous = entry.servers;
+  const servers = new Map<string, ConnectedServer>();
+  const isCurrent = (): boolean =>
+    gatewayState.projects.get(projectDir) === entry && entry.servers === servers;
+  entry.servers = servers;
+  entry.ready = false;
+  entry.whenReady = Promise.allSettled(
+    gatewayState.localServers.map(async (definition) => {
+      const server = await connectLocalServer(definition, projectDir);
+      if (!server) return;
+      if (isCurrent()) servers.set(definition.id, server);
+      else await closeServerConnection(server); // project closed or restarted meanwhile
+    })
+  ).then(() => {
+    if (!isCurrent()) return;
+    entry.ready = true;
+    for (const session of gatewayState.activeSessions.values()) {
+      if (session.projectDir !== projectDir) continue;
+      session.server.sendToolListChanged().catch((error: unknown) => {
+        logger.warn(`Failed to notify session of project tools: ${String(error)}`);
+      });
+    }
+  });
+  return closeServers(previous);
+}
+
+function acquireProject(projectDir: string): void {
+  let entry = gatewayState.projects.get(projectDir);
+  if (!entry) {
+    entry = { sessions: 0, servers: new Map(), ready: false, whenReady: Promise.resolve() };
+    gatewayState.projects.set(projectDir, entry);
+    void startProjectServers(projectDir, entry);
+  }
+  entry.sessions++;
+}
+
+function releaseProject(projectDir: string): void {
+  const entry = gatewayState.projects.get(projectDir);
+  if (!entry || --entry.sessions > 0) return;
+  gatewayState.projects.delete(projectDir);
+  void closeServers(entry.servers);
+}
+
+function closeAllProjectServers(): Promise<unknown> {
+  return Promise.allSettled(
+    [...gatewayState.projects.values()].map((e) => closeServers(e.servers))
+  );
+}
+
+/** A project session's servers: the project's local instances plus the shared remote ones */
+function buildProjectView(
+  profileId: string,
+  entry: ProjectEntry
+): (ProfileView & { servers: Map<string, ConnectedServer> }) | null {
+  const servers = new Map<string, ConnectedServer>();
+  for (const id of new Set([...gatewayState.connectedServers.keys(), ...entry.servers.keys()])) {
+    const shared = gatewayState.connectedServers.get(id);
+    const server = entry.servers.get(id) ?? (shared?.type === "remote" ? shared : undefined);
+    if (server) servers.set(id, server);
+  }
+  const view = buildProfileView(profileId, servers);
+  return view && { ...view, servers };
+}
+
+function toolError(text: string): CallToolResult {
+  return { content: [{ type: "text", text }], isError: true };
+}
+
 function prefixTool(serverName: string, tool: Tool): Tool {
   const prefixedTool: Tool = {
     ...tool,
@@ -365,7 +505,10 @@ function refreshAggregatedTools(): Tool[] {
   return aggregated;
 }
 
-function buildProfileView(profileId: string): ProfileView | null {
+function buildProfileView(
+  profileId: string,
+  servers: Map<string, ConnectedServer> = gatewayState.connectedServers
+): ProfileView | null {
   const profileService = getProfileService();
   const profile = profileService.getProfile(profileId);
 
@@ -389,7 +532,7 @@ function buildProfileView(profileId: string): ProfileView | null {
   const tools: Tool[] = [];
   const toolMap = new Map<string, string>();
 
-  for (const [serverId, server] of gatewayState.connectedServers) {
+  for (const [serverId, server] of servers) {
     if (profileServerIds && !profileServerIds.has(serverId)) continue;
 
     for (const tool of server.tools) {
@@ -429,7 +572,8 @@ function refreshProfileViews(): void {
 async function handleToolCall(
   toolName: string,
   args: Record<string, unknown>,
-  toolToServerMap: Map<string, string> = gatewayState.toolToServerMap
+  toolToServerMap: Map<string, string> = gatewayState.toolToServerMap,
+  servers: Map<string, ConnectedServer> = gatewayState.connectedServers
 ): Promise<CallToolResult> {
   const serverId = toolToServerMap.get(toolName);
 
@@ -440,7 +584,7 @@ async function handleToolCall(
     };
   }
 
-  const server = gatewayState.connectedServers.get(serverId);
+  const server = servers.get(serverId);
   if (!server) {
     return {
       content: [{ type: "text", text: `Server not connected: ${serverId}` }],
@@ -463,17 +607,25 @@ async function handleToolCall(
   }
 }
 
-function createSessionServer(profileId?: string): Server {
+function createSessionServer(profileId?: string, projectDir?: string): Server {
   const sessionServer = new Server(
     { name: "mcpsm-gateway", version: VERSION },
     {
       capabilities: {
-        tools: {},
+        tools: { listChanged: true },
       },
     }
   );
 
+  // Project sessions use their project's servers once all have started
+  const projectView = (): ReturnType<typeof buildProjectView> => {
+    const entry = projectDir ? gatewayState.projects.get(projectDir) : undefined;
+    return entry?.ready ? buildProjectView(profileId ?? "default", entry) : null;
+  };
+
   sessionServer.setRequestHandler(ListToolsRequestSchema, () => {
+    const view = projectView();
+    if (view) return { tools: view.aggregatedTools };
     if (profileId) {
       const view = gatewayState.profileViews.get(profileId);
       return { tools: view?.aggregatedTools ?? [] };
@@ -487,7 +639,30 @@ function createSessionServer(profileId?: string): Server {
     const toolMap = profileId
       ? (gatewayState.profileViews.get(profileId)?.toolToServerMap ?? new Map<string, string>())
       : gatewayState.toolToServerMap;
-    return await handleToolCall(toolName, args, toolMap);
+    const sharedId = toolMap.get(toolName);
+    const shared = sharedId ? gatewayState.connectedServers.get(sharedId) : undefined;
+    // Remote servers are shared, so their calls need not wait for the project's local ones
+    if (!projectDir || shared?.type === "remote") {
+      return await handleToolCall(toolName, args, toolMap);
+    }
+
+    // Local servers read their cwd, so calls run on the project's instances
+    const entry = gatewayState.projects.get(projectDir);
+    if (entry && !entry.ready) await entry.whenReady;
+    const view = projectView();
+    if (!view) return toolError(`The servers for ${projectDir} are restarting. Try again.`);
+    if (view.toolToServerMap.has(toolName)) {
+      return await handleToolCall(toolName, args, view.toolToServerMap, view.servers);
+    }
+
+    // Listed from the shared instance before the project's started
+    if (!sharedId || !shared) return toolError(`Unknown tool: ${toolName}`);
+    if (!view.servers.has(sharedId)) {
+      return toolError(`${shared.name} failed to start in ${projectDir}. See: mcpsm daemon logs`);
+    }
+    return toolError(
+      `${toolName} is not available in ${projectDir}: ${shared.name} does not offer it there. Reload the tool list for this project's tools.`
+    );
   });
 
   return sessionServer;
@@ -542,6 +717,7 @@ export async function startGateway(
     const selectedSet = serverIdsToStart;
     gatewayState.activeSelection = usingExplicitSelection ? new Set(selectedSet) : null;
     localServers = localServers.filter((s) => selectedSet.has(s.id));
+    gatewayState.localServers = localServers;
     remoteServers = remoteServers.filter(
       (s) => selectedSet.has(s.id) || selectedSet.has(`remote:${s.id}`)
     );
@@ -554,7 +730,7 @@ export async function startGateway(
 
     // Connect to all servers
     const connectionPromises: Promise<ConnectedServer | null>[] = [
-      ...localServers.map(connectLocalServer),
+      ...localServers.map((s) => connectLocalServer(s)),
       ...remoteServers.map(connectRemoteServer),
     ];
 
@@ -583,13 +759,25 @@ export async function startGateway(
 
     // Create HTTP server with StreamableHTTP transport
     const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-      // CORS headers
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-      res.setHeader(
-        "Access-Control-Allow-Headers",
-        "Content-Type, mcp-session-id, mcp-protocol-version"
-      );
+      const origin = req.headers.origin;
+      const rejection = rejectRequestSource(req.headers.host, origin);
+      if (rejection) {
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: rejection }));
+        return;
+      }
+
+      // CORS only for allowlisted origins
+      if (origin) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Vary", "Origin");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+        res.setHeader(
+          "Access-Control-Allow-Headers",
+          "Content-Type, mcp-session-id, mcp-protocol-version"
+        );
+        res.setHeader("Access-Control-Expose-Headers", "mcp-session-id");
+      }
 
       if (req.method === "OPTIONS") {
         res.writeHead(204);
@@ -643,7 +831,14 @@ export async function startGateway(
         if (!transport) {
           // Create new transport AND server for new sessions
           let currentSessionId: string | undefined;
-          const sessionServer = createSessionServer(profileId);
+          // Not in Access-Control-Allow-Headers, so web pages cannot set it
+          const projectHeader = req.headers[PROJECT_DIR_HEADER];
+          let projectDir: string | undefined;
+          try {
+            if (typeof projectHeader === "string")
+              projectDir = resolveProjectDir([decodeURIComponent(projectHeader)]);
+          } catch {}
+          const sessionServer = createSessionServer(profileId, projectDir);
           const newTransport = new StreamableHTTPServerTransport({
             sessionIdGenerator: (): string => randomUUID(),
             enableJsonResponse: true,
@@ -652,7 +847,9 @@ export async function startGateway(
               gatewayState.activeSessions.set(newSessionId, {
                 transport: newTransport,
                 server: sessionServer,
+                projectDir,
               });
+              if (projectDir) acquireProject(projectDir);
             },
           });
 
@@ -661,6 +858,7 @@ export async function startGateway(
           // Clean up session when transport closes
           transport.onclose = (): void => {
             if (currentSessionId) {
+              if (projectDir) releaseProject(projectDir);
               gatewayState.activeSessions.delete(currentSessionId);
               sessionServer.close().catch((err) => {
                 logger.warn(`Error closing session server ${currentSessionId}:`, err);
@@ -725,7 +923,7 @@ export async function stopGateway(): Promise<{ success: boolean; error?: string 
 
   try {
     // Close all server connections with timeout to prevent hanging
-    const closePromises: Promise<void>[] = [];
+    const closePromises: Promise<unknown>[] = [closeAllProjectServers()];
     for (const [, server] of gatewayState.connectedServers) {
       closePromises.push(closeServerConnection(server));
     }
@@ -758,17 +956,7 @@ export async function stopGateway(): Promise<{ success: boolean; error?: string 
       });
     }
 
-    gatewayState = {
-      running: false,
-      port: 8850,
-      httpServer: null,
-      activeSessions: new Map(),
-      connectedServers: new Map(),
-      toolToServerMap: new Map(),
-      aggregatedTools: [],
-      profileViews: new Map(),
-      activeSelection: null,
-    };
+    gatewayState = createGatewayState();
 
     logger.info("Gateway stopped");
     return { success: true };
@@ -879,18 +1067,22 @@ export async function refreshGateway(
       logger.warn("No servers selected/enabled during refresh; clearing connections");
     }
 
-    // Close existing connections
+    // Close existing connections; open projects restart with the new definitions
+    gatewayState.localServers = localServers;
     const closePromises = Array.from(gatewayState.connectedServers.values()).map((server) =>
       closeServerConnection(server)
     );
-    await Promise.allSettled(closePromises);
+    const projectRestarts = [...gatewayState.projects].map(([dir, entry]) =>
+      startProjectServers(dir, entry)
+    );
+    await Promise.allSettled([...closePromises, ...projectRestarts]);
     gatewayState.connectedServers.clear();
     gatewayState.toolToServerMap.clear();
     gatewayState.aggregatedTools = [];
 
     // Reconnect to selected servers
     const connectionPromises: Promise<ConnectedServer | null>[] = [
-      ...localServers.map(connectLocalServer),
+      ...localServers.map((s) => connectLocalServer(s)),
       ...remoteServers.map(connectRemoteServer),
     ];
 
@@ -960,7 +1152,11 @@ export async function refreshGatewayTools(
     getProfileService().reload();
 
     const toolFilters = configService.getToolFilters();
-    const servers = Array.from(gatewayState.connectedServers.values());
+    // Project instances too, so a disabled tool disappears from project sessions
+    const servers = [
+      ...gatewayState.connectedServers.values(),
+      ...[...gatewayState.projects.values()].flatMap((entry) => [...entry.servers.values()]),
+    ];
 
     const refreshResults = await Promise.all(
       servers.map(async (server) => {

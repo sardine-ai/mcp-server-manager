@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "fs";
 import net from "net";
-import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import os from "os";
+import path from "path";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { LocalServer, RemoteServer } from "../src/types/index.js";
 
 const sdkMocks = vi.hoisted(() => {
@@ -419,6 +422,49 @@ describe("GatewayService unit coverage", () => {
       expect.objectContaining({ name: "datadog__get_trace", title: "[datadog] Get Trace" }),
       { name: "datadog__untitled", description: "[datadog] " },
     ]);
+  });
+
+  it("runs a project session's remote tool calls without waiting for its local servers", async () => {
+    const port = await getFreePort();
+    const remote = remoteServer({ name: "remote" });
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), "mcpsm-unit-project-"));
+    serviceMocks.configService.getPort.mockReturnValue(port);
+    serviceMocks.configService.getSelectionState.mockReturnValue({
+      local: [],
+      remote: [`remote:${remote.id}`],
+    });
+    serviceMocks.configService.getLocalServers.mockReturnValue([]);
+    serviceMocks.configService.getRemoteServers.mockReturnValue([remote]);
+    serviceMocks.configService.getToolFilters.mockReturnValue({});
+    serviceMocks.profileService.list.mockReturnValue([{ id: "default" }]);
+    serviceMocks.profileService.getProfile.mockReturnValue({
+      id: "default",
+      servers: [],
+      remoteServers: [remote.id],
+    });
+    sdkMocks.listToolsResults.push({ tools: [{ name: "search" }] });
+    const result = { content: [{ type: "text", text: "ok" }] };
+
+    try {
+      await expect(startGateway()).resolves.toEqual({ success: true });
+      sdkMocks.clientInstances[0].callTool.mockResolvedValue(result);
+      // The project's local servers never finish starting
+      const starting = { sessions: 0, servers: new Map(), ready: false };
+      setGatewayStateForTests({
+        projects: new Map([[project, { ...starting, whenReady: new Promise<void>(() => {}) }]]),
+      });
+      await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: { "x-mcpsm-project-dir": encodeURIComponent(project) },
+      });
+
+      const callTool = sdkMocks.serverInstances[0].handlers.get(CallToolRequestSchema);
+      await expect(
+        callTool({ params: { name: "remote__search", arguments: {} } })
+      ).resolves.toEqual(result);
+    } finally {
+      fs.rmSync(project, { recursive: true, force: true });
+    }
   });
 
   it("starts with zero tools when no servers are selected", async () => {

@@ -45,7 +45,7 @@ mcpsm clients disconnect cursor
 When you connect a client:
 
 1. **Single Gateway Server**: A `mcpsm` server entry is added to your client's configuration
-2. **Gateway Connection**: The `mcpsm` entry points to `localhost:{port}/mcp` (either via `supergateway` or direct URL, depending on the client)
+2. **Gateway Connection**: The `mcpsm` entry points to `localhost:{port}/mcp` (via `mcpsm bridge`, or a direct URL for Kiro and Zed)
 3. **All Servers Available**: All your configured servers become accessible through this gateway
 4. **Existing Servers Preserved**: Any servers you already had configured remain untouched
 
@@ -170,8 +170,8 @@ When you connect a client, mcpsm adds this to the client's MCP server config:
 ```json
 {
   "mcpsm": {
-    "command": "npx",
-    "args": ["-y", "mcp-proxy", "--transport", "stdio", "http://localhost:PORT/mcp"]
+    "command": "/path/to/node",
+    "args": ["/path/to/mcp-server-manager/bin/cli.js", "bridge", "http://localhost:PORT/mcp"]
   }
 }
 ```
@@ -195,7 +195,7 @@ Windsurf:         ~/Library/Application Support/Windsurf/User/globalStorage/wind
 Kiro:             ~/.kiro/settings/mcp.json
 VS Code:          ~/Library/Application Support/Code/User/mcp.json
 Zed:              ~/.config/zed/settings.json
-Google Antigravity: ~/.antigravity/mcp_config.json
+Google Antigravity: ~/.gemini/config/mcp_config.json
 ```
 
 #### Windows
@@ -207,7 +207,7 @@ Windsurf:         %APPDATA%\Windsurf\User\globalStorage\windsurf.mcp\config.json
 Kiro:             %USERPROFILE%\.kiro\settings\mcp.json
 VS Code:          %APPDATA%\Code\User\mcp.json
 Zed:              %APPDATA%\Zed\settings.json
-Google Antigravity: %USERPROFILE%\.antigravity\mcp_config.json
+Google Antigravity: %USERPROFILE%\.gemini\config\mcp_config.json
 ```
 
 #### Linux
@@ -219,7 +219,7 @@ Windsurf:         ~/.config/Windsurf/User/globalStorage/windsurf.mcp/config.json
 Kiro:             ~/.kiro/settings/mcp.json
 VS Code:          ~/.config/Code/User/mcp.json
 Zed:              ~/.config/zed/settings.json
-Google Antigravity: ~/.antigravity/mcp_config.json
+Google Antigravity: ~/.gemini/config/mcp_config.json
 ```
 
 ## View Client Status
@@ -309,8 +309,8 @@ If you prefer to edit the config manually:
    ```json
    {
      "mcpsm": {
-       "command": "npx",
-       "args": ["-y", "mcp-proxy", "--transport", "stdio", "http://localhost:8850/mcp"]
+       "command": "mcpsm",
+       "args": ["bridge", "http://localhost:8850/mcp"]
      }
    }
    ```
@@ -347,7 +347,7 @@ The clients connect through a **gateway server** running in the mcpsm daemon:
 ```
 Your Client (Claude, Cursor, etc.)
         ↓ (via mcpsm gateway server in config)
-mcp-proxy (forwards stdio requests)
+mcpsm bridge (forwards stdio requests and the project folder)
         ↓ (to localhost:PORT/mcp)
 mcpsm Daemon
         ↓ (proxies to actual servers)

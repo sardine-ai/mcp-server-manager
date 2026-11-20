@@ -8,6 +8,8 @@ export interface Settings {
   port: number;
   /** Preferred editor for config files */
   editor: string;
+  /** Comma-separated browser origins allowed to call the gateway (empty = none) */
+  allowedOrigins: string;
 }
 
 /** Available theme options (kept for future use) */

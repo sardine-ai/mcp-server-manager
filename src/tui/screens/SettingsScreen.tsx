@@ -69,7 +69,8 @@ export function SettingsScreen({ onBack, initialKey }: SettingsScreenProps): Rea
         return;
       }
 
-      if (value.trim()) {
+      // An empty allowlist is valid: it blocks every browser origin
+      if (value.trim() || key === "allowedOrigins") {
         setState((prev) => ({ ...prev, view: "saving" }));
         const result = key === "port"
           ? await changeGatewayPort(Number(value.trim()))

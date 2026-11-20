@@ -8,6 +8,7 @@ import { pathToFileURL } from "url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import {
   PROJECT_DIR_HEADER,
   rejectRequestSource,
@@ -136,28 +137,78 @@ describe("gateway HTTP endpoint", () => {
     const daemon = await callCwd(plain.client);
     expect(daemon.cwd).toBe(fs.realpathSync(process.cwd()));
     expect((await callCwd(invalid.client)).pid).toBe(daemon.pid);
+    const names = (await plain.client.listTools()).tools.map((tool) => tool.name);
+    expect(names).toEqual(["cwd__cwd", "cwd__shared_only"]);
   });
 
-  it("passes the folder a client starts `mcpsm bridge` in", async () => {
+  it("switches a project session to the tools its project's instance offers", async () => {
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), "mcpsm-tools-"));
+    fs.writeFileSync(path.join(project, ".fixture-project"), "");
+    try {
+      const { client } = await connectHttp({ [PROJECT_DIR_HEADER]: encodeURIComponent(project) });
+      const changed = new Promise<void>((resolve) =>
+        client.setNotificationHandler(ToolListChangedNotificationSchema, () => resolve())
+      );
+      // Shared tools until the project's instance has started, then a list_changed
+      expect((await client.listTools()).tools.map((tool) => tool.name)).toContain(
+        "cwd__shared_only"
+      );
+      await changed;
+      expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
+        "cwd__cwd",
+        "cwd__project_only",
+      ]);
+      expect(await client.callTool({ name: "cwd__project_only", arguments: {} })).toMatchObject({
+        content: [{ text: "project" }],
+      });
+
+      // A tool listed before the switch gets an explanation, not "Unknown tool"
+      const stale = await client.callTool({ name: "cwd__shared_only", arguments: {} });
+      expect(stale.isError).toBe(true);
+      expect((stale.content as { text: string }[])[0].text).toBe(
+        `cwd__shared_only is not available in ${project}: cwd does not offer it there. Reload the tool list for this project's tools.`
+      );
+      expect((await client.callTool({ name: "cwd__nope", arguments: {} })).content).toMatchObject([
+        { text: "Unknown tool: cwd__nope" },
+      ]);
+    } finally {
+      fs.rmSync(project, { recursive: true, force: true });
+    }
+  });
+
+  it("passes the folder a client starts `mcpsm bridge` in, and its tool changes", async () => {
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), "mcpsm-bridge-"));
+    fs.writeFileSync(path.join(project, ".fixture-project"), "");
     const tsx = pathToFileURL(path.resolve("node_modules/tsx/dist/loader.mjs")).href;
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: ["--import", tsx, path.resolve("src/cli/index.ts"), "bridge", url],
-      cwd: projectDir,
-      env: { ...process.env, MCP_MANAGER_CONFIG_DIR: path.join(projectDir, ".mcpsm") } as Record<
+      cwd: project,
+      env: { ...process.env, MCP_MANAGER_CONFIG_DIR: path.join(project, ".mcpsm") } as Record<
         string,
         string
       >,
     });
     const client = new Client({ name: "bridge-test", version: "1.0.0" });
-    await client.connect(transport);
+    const changed = new Promise<void>((resolve) =>
+      client.setNotificationHandler(ToolListChangedNotificationSchema, () => resolve())
+    );
+    try {
+      await client.connect(transport);
+      await changed;
+      expect((await client.listTools()).tools.map((tool) => tool.name)).toContain(
+        "cwd__project_only"
+      );
 
-    const { cwd, pid } = await callCwd(client);
-    expect(cwd).toBe(fs.realpathSync(projectDir));
+      const { cwd, pid } = await callCwd(client);
+      expect(cwd).toBe(fs.realpathSync(project));
 
-    // Closing the client ends the bridge, which ends the gateway session
-    await client.close();
-    expect(await waitForExit(pid)).toBe(true);
+      // Closing the client ends the bridge, which ends the gateway session
+      await client.close();
+      expect(await waitForExit(pid)).toBe(true);
+    } finally {
+      fs.rmSync(project, { recursive: true, force: true });
+    }
   });
 
   describe("request sources", () => {

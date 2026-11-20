@@ -233,10 +233,10 @@ Local (STDIO) servers such as Serena, jbcontext, or context-mode read their work
 
 1. The client starts `mcpsm bridge <url>` in the project it has open (Claude Code, Codex, OpenCode, and Gemini do this; Cursor passes `--cwd ${workspaceFolder}`).
 2. The bridge sends that folder to the daemon in the `x-mcpsm-project-dir` header. `/` and your home folder count as "no project".
-3. For that session, tool calls to local servers go to an instance started in the project folder. Instances are started on first use, shared by every session in the same folder, and stopped when the folder's last session ends.
+3. The daemon starts every selected local server in the project folder when the first session for that folder begins. These instances are shared by every session in the folder and stopped when its last session ends. Tool calls to local servers run on them.
 4. Remote (HTTP/SSE) servers and sessions without a project keep using the daemon's shared instances.
 
-Tool lists come from the shared instances, so clients get them without waiting for project instances to start.
+Until the project's instances have started, the session lists the shared instances' tools, so clients do not wait. Then the daemon sends `notifications/tools/list_changed`, and the session lists the tools the project's instances offer, which can differ: Serena started in a project leaves out `activate_project` and `get_current_config`. Calling a tool from the earlier list that the project's instance lacks returns an error saying so.
 
 ### Request Checks
 

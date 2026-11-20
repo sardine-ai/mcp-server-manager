@@ -107,6 +107,7 @@ async function closeServerConnection(server: ConnectedServer): Promise<void> {
 interface SessionEntry {
   transport: StreamableHTTPServerTransport;
   server: Server;
+  projectDir?: string;
 }
 
 interface ProfileView {
@@ -115,10 +116,12 @@ interface ProfileView {
   aggregatedTools: Tool[];
 }
 
-/** Local servers spawned in one project folder, shared by that folder's sessions */
+/** Local servers started in one project folder, shared by that folder's sessions */
 interface ProjectEntry {
   sessions: number;
-  servers: Map<string, Promise<ConnectedServer | null>>;
+  servers: Map<string, ConnectedServer>; // a new map on each (re)start
+  ready: boolean; // every server has started or failed
+  whenReady: Promise<void>;
 }
 
 interface GatewayState {
@@ -131,6 +134,7 @@ interface GatewayState {
   aggregatedTools: Tool[];
   profileViews: Map<string, ProfileView>;
   activeSelection: Set<string> | null;
+  localServers: LocalServer[]; // selected local servers, also started in each open project
   projects: Map<string, ProjectEntry>; // projectDir -> local servers running in it
 }
 
@@ -144,6 +148,7 @@ const createGatewayState = (): GatewayState => ({
   aggregatedTools: [],
   profileViews: new Map(),
   activeSelection: null,
+  localServers: [],
   projects: new Map(),
 });
 
@@ -371,50 +376,83 @@ async function connectRemoteServer(server: RemoteServer): Promise<ConnectedServe
   }
 }
 
-// ponytail: one instance per (project, local server) used there, closed when the project's last
-// session ends. Sessions dropped without a DELETE keep theirs until the next refresh/stop.
-function acquireProject(projectDir: string): void {
-  const entry = gatewayState.projects.get(projectDir) ?? { sessions: 0, servers: new Map() };
-  entry.sessions++;
-  gatewayState.projects.set(projectDir, entry);
+function closeServers(servers: Map<string, ConnectedServer>): Promise<unknown> {
+  return Promise.allSettled([...servers.values()].map(closeServerConnection));
 }
 
-function closeProjectServers(entry: ProjectEntry): Promise<unknown> {
-  const pending = [...entry.servers.values()];
-  entry.servers.clear();
-  return Promise.allSettled(pending.map((p) => p.then((s) => s && closeServerConnection(s))));
+/**
+ * (Re)starts every selected local server in the project and closes the previous ones.
+ * Sessions list the shared tools until then, so they are told when the project's are ready.
+ */
+// ponytail: all selected local servers start per open project and stop with its last session.
+// Sessions dropped without a DELETE keep theirs until the next refresh/stop.
+function startProjectServers(projectDir: string, entry: ProjectEntry): Promise<unknown> {
+  const previous = entry.servers;
+  const servers = new Map<string, ConnectedServer>();
+  const isCurrent = (): boolean =>
+    gatewayState.projects.get(projectDir) === entry && entry.servers === servers;
+  entry.servers = servers;
+  entry.ready = false;
+  entry.whenReady = Promise.allSettled(
+    gatewayState.localServers.map(async (definition) => {
+      const server = await connectLocalServer(definition, projectDir);
+      if (!server) return;
+      if (isCurrent()) servers.set(definition.id, server);
+      else await closeServerConnection(server); // project closed or restarted meanwhile
+    })
+  ).then(() => {
+    if (!isCurrent()) return;
+    entry.ready = true;
+    for (const session of gatewayState.activeSessions.values()) {
+      if (session.projectDir !== projectDir) continue;
+      session.server.sendToolListChanged().catch((error: unknown) => {
+        logger.warn(`Failed to notify session of project tools: ${String(error)}`);
+      });
+    }
+  });
+  return closeServers(previous);
+}
+
+function acquireProject(projectDir: string): void {
+  let entry = gatewayState.projects.get(projectDir);
+  if (!entry) {
+    entry = { sessions: 0, servers: new Map(), ready: false, whenReady: Promise.resolve() };
+    gatewayState.projects.set(projectDir, entry);
+    void startProjectServers(projectDir, entry);
+  }
+  entry.sessions++;
 }
 
 function releaseProject(projectDir: string): void {
   const entry = gatewayState.projects.get(projectDir);
   if (!entry || --entry.sessions > 0) return;
   gatewayState.projects.delete(projectDir);
-  void closeProjectServers(entry);
+  void closeServers(entry.servers);
 }
 
 function closeAllProjectServers(): Promise<unknown> {
-  return Promise.allSettled([...gatewayState.projects.values()].map(closeProjectServers));
+  return Promise.allSettled(
+    [...gatewayState.projects.values()].map((e) => closeServers(e.servers))
+  );
 }
 
-/** The instance of a local server running in the project folder, spawned on first use */
-function getProjectServer(projectDir: string, serverId: string): Promise<ConnectedServer | null> {
-  const entry = gatewayState.projects.get(projectDir);
-  if (!entry) return Promise.resolve(null);
-
-  let pending = entry.servers.get(serverId);
-  if (!pending) {
-    const definition = getConfigService()
-      .getLocalServers()
-      .find((s) => s.id === serverId);
-    const spawned = definition ? connectLocalServer(definition, projectDir) : Promise.resolve(null);
-    // Retry on the next call instead of caching a failed start
-    void spawned.then((s) => {
-      if (!s && entry.servers.get(serverId) === spawned) entry.servers.delete(serverId);
-    });
-    entry.servers.set(serverId, spawned);
-    pending = spawned;
+/** A project session's servers: the project's local instances plus the shared remote ones */
+function buildProjectView(
+  profileId: string,
+  entry: ProjectEntry
+): (ProfileView & { servers: Map<string, ConnectedServer> }) | null {
+  const servers = new Map<string, ConnectedServer>();
+  for (const id of new Set([...gatewayState.connectedServers.keys(), ...entry.servers.keys()])) {
+    const shared = gatewayState.connectedServers.get(id);
+    const server = entry.servers.get(id) ?? (shared?.type === "remote" ? shared : undefined);
+    if (server) servers.set(id, server);
   }
-  return pending;
+  const view = buildProfileView(profileId, servers);
+  return view && { ...view, servers };
+}
+
+function toolError(text: string): CallToolResult {
+  return { content: [{ type: "text", text }], isError: true };
 }
 
 function prefixTool(serverName: string, tool: Tool): Tool {
@@ -467,7 +505,10 @@ function refreshAggregatedTools(): Tool[] {
   return aggregated;
 }
 
-function buildProfileView(profileId: string): ProfileView | null {
+function buildProfileView(
+  profileId: string,
+  servers: Map<string, ConnectedServer> = gatewayState.connectedServers
+): ProfileView | null {
   const profileService = getProfileService();
   const profile = profileService.getProfile(profileId);
 
@@ -491,7 +532,7 @@ function buildProfileView(profileId: string): ProfileView | null {
   const tools: Tool[] = [];
   const toolMap = new Map<string, string>();
 
-  for (const [serverId, server] of gatewayState.connectedServers) {
+  for (const [serverId, server] of servers) {
     if (profileServerIds && !profileServerIds.has(serverId)) continue;
 
     for (const tool of server.tools) {
@@ -532,7 +573,7 @@ async function handleToolCall(
   toolName: string,
   args: Record<string, unknown>,
   toolToServerMap: Map<string, string> = gatewayState.toolToServerMap,
-  projectDir?: string
+  servers: Map<string, ConnectedServer> = gatewayState.connectedServers
 ): Promise<CallToolResult> {
   const serverId = toolToServerMap.get(toolName);
 
@@ -543,7 +584,7 @@ async function handleToolCall(
     };
   }
 
-  let server = gatewayState.connectedServers.get(serverId);
+  const server = servers.get(serverId);
   if (!server) {
     return {
       content: [{ type: "text", text: `Server not connected: ${serverId}` }],
@@ -553,18 +594,6 @@ async function handleToolCall(
 
   // Remove the server prefix from the tool name
   const originalToolName = toolName.replace(`${server.name}__`, "");
-
-  // Local servers read their cwd, so run project sessions' calls in the project folder
-  if (projectDir && server.type === "local") {
-    const projectServer = await getProjectServer(projectDir, serverId);
-    if (!projectServer) {
-      return {
-        content: [{ type: "text", text: `Failed to start ${server.name} in ${projectDir}` }],
-        isError: true,
-      };
-    }
-    server = projectServer;
-  }
 
   try {
     const result = await server.client.callTool({ name: originalToolName, arguments: args });
@@ -583,12 +612,20 @@ function createSessionServer(profileId?: string, projectDir?: string): Server {
     { name: "mcpsm-gateway", version: VERSION },
     {
       capabilities: {
-        tools: {},
+        tools: { listChanged: true },
       },
     }
   );
 
+  // Project sessions use their project's servers once all have started
+  const projectView = (): ReturnType<typeof buildProjectView> => {
+    const entry = projectDir ? gatewayState.projects.get(projectDir) : undefined;
+    return entry?.ready ? buildProjectView(profileId ?? "default", entry) : null;
+  };
+
   sessionServer.setRequestHandler(ListToolsRequestSchema, () => {
+    const view = projectView();
+    if (view) return { tools: view.aggregatedTools };
     if (profileId) {
       const view = gatewayState.profileViews.get(profileId);
       return { tools: view?.aggregatedTools ?? [] };
@@ -602,7 +639,27 @@ function createSessionServer(profileId?: string, projectDir?: string): Server {
     const toolMap = profileId
       ? (gatewayState.profileViews.get(profileId)?.toolToServerMap ?? new Map<string, string>())
       : gatewayState.toolToServerMap;
-    return await handleToolCall(toolName, args, toolMap, projectDir);
+    if (!projectDir) return await handleToolCall(toolName, args, toolMap);
+
+    // Local servers read their cwd, so calls run on the project's instances
+    const entry = gatewayState.projects.get(projectDir);
+    if (entry && !entry.ready) await entry.whenReady;
+    const view = projectView();
+    if (!view) return toolError(`The servers for ${projectDir} are restarting. Try again.`);
+    if (view.toolToServerMap.has(toolName)) {
+      return await handleToolCall(toolName, args, view.toolToServerMap, view.servers);
+    }
+
+    // Listed from the shared instance before the project's started
+    const sharedId = toolMap.get(toolName);
+    const shared = sharedId ? gatewayState.connectedServers.get(sharedId) : undefined;
+    if (!sharedId || !shared) return toolError(`Unknown tool: ${toolName}`);
+    if (!view.servers.has(sharedId)) {
+      return toolError(`${shared.name} failed to start in ${projectDir}. See: mcpsm daemon logs`);
+    }
+    return toolError(
+      `${toolName} is not available in ${projectDir}: ${shared.name} does not offer it there. Reload the tool list for this project's tools.`
+    );
   });
 
   return sessionServer;
@@ -657,6 +714,7 @@ export async function startGateway(
     const selectedSet = serverIdsToStart;
     gatewayState.activeSelection = usingExplicitSelection ? new Set(selectedSet) : null;
     localServers = localServers.filter((s) => selectedSet.has(s.id));
+    gatewayState.localServers = localServers;
     remoteServers = remoteServers.filter(
       (s) => selectedSet.has(s.id) || selectedSet.has(`remote:${s.id}`)
     );
@@ -786,6 +844,7 @@ export async function startGateway(
               gatewayState.activeSessions.set(newSessionId, {
                 transport: newTransport,
                 server: sessionServer,
+                projectDir,
               });
               if (projectDir) acquireProject(projectDir);
             },
@@ -1005,11 +1064,15 @@ export async function refreshGateway(
       logger.warn("No servers selected/enabled during refresh; clearing connections");
     }
 
-    // Close existing connections
+    // Close existing connections; open projects restart with the new definitions
+    gatewayState.localServers = localServers;
     const closePromises = Array.from(gatewayState.connectedServers.values()).map((server) =>
       closeServerConnection(server)
     );
-    await Promise.allSettled([...closePromises, closeAllProjectServers()]);
+    const projectRestarts = [...gatewayState.projects].map(([dir, entry]) =>
+      startProjectServers(dir, entry)
+    );
+    await Promise.allSettled([...closePromises, ...projectRestarts]);
     gatewayState.connectedServers.clear();
     gatewayState.toolToServerMap.clear();
     gatewayState.aggregatedTools = [];

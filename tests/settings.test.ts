@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { SettingsService, resetSettingsService } from "../src/services/settings.service.js";
+import {
+  SettingsService,
+  getAllowedOrigins,
+  resetSettingsService,
+} from "../src/services/settings.service.js";
 import { resetConfigService } from "../src/services/config.service.js";
 
 // Test directory setup
@@ -89,6 +93,31 @@ describe("SettingsService", () => {
       expect(result.success).toBe(true);
       expect(settingsService.get("editor")).toBe("vim");
     });
+
+    it("allows no browser origins by default and stores a normalized allowlist", () => {
+      expect(settingsService.get("allowedOrigins")).toBe("");
+      expect(getAllowedOrigins()).toEqual([]);
+
+      const result = settingsService.set(
+        "allowedOrigins",
+        "http://localhost:6274, https://app.example"
+      );
+      expect(result).toEqual({
+        success: true,
+        value: "http://localhost:6274,https://app.example",
+      });
+      expect(getAllowedOrigins()).toEqual(["http://localhost:6274", "https://app.example"]);
+    });
+
+    it.each(["https://app.example/", "app.example", "*"])(
+      "rejects %s as an allowed origin",
+      (value) => {
+        const result = settingsService.set("allowedOrigins", value);
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("Not an origin");
+        expect(settingsService.get("allowedOrigins")).toBe("");
+      }
+    );
 
     it("should reject invalid setting key", () => {
       const result = settingsService.set(

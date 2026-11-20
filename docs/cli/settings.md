@@ -17,6 +17,7 @@ Settings:
 
   port            8850          Gateway port number
   editor          vi            Default editor command
+  allowedOrigins                Browser origins allowed to call the gateway
 ```
 
 ---
@@ -68,10 +69,11 @@ mcpsm settings reset
 
 ### Default Values
 
-| Setting  | Default           |
-| -------- | ----------------- |
-| `port`   | `8850`            |
-| `editor` | `$EDITOR` or `vi` |
+| Setting          | Default                    |
+| ---------------- | -------------------------- |
+| `port`           | `8850`                     |
+| `editor`         | `$EDITOR` or `vi`          |
+| `allowedOrigins` | empty (no browser origins) |
 
 ---
 
@@ -99,6 +101,17 @@ mcpsm settings set editor "code -w"
 
 - Type: `string`
 - Default: `$EDITOR` environment variable, or `vi`
+
+### allowedOrigins
+
+Browser origins (`scheme://host[:port]`, comma-separated) allowed to call the gateway. The gateway rejects any request that has an `Origin` header not on this list, so web pages cannot call your tools. MCP clients that are not browsers (Claude Code, Codex, Cursor, OpenCode, Antigravity, `mcpsm bridge`, Kiro, Zed) send no `Origin` and need no entry. Add one only for a browser-based client, such as MCP Inspector in direct mode:
+
+```bash
+mcpsm settings set allowedOrigins http://localhost:6274
+```
+
+- Type: `string`
+- Default: empty
 
 ---
 

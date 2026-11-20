@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import fs from "fs";
+import http from "http";
 import net from "net";
 import os from "os";
 import path from "path";
@@ -9,6 +10,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   PROJECT_DIR_HEADER,
+  rejectRequestSource,
   resolveProjectDir,
   startGateway,
   stopGateway,
@@ -29,10 +31,12 @@ const mocks = vi.hoisted(() => ({
     list: vi.fn(() => [{ id: "default" }]),
     getProfile: vi.fn(() => ({ servers: [], remoteServers: [] })),
   },
+  origins: [] as string[],
 }));
 vi.mock("../src/services/config.service.js", () => ({ getConfigService: () => mocks.config }));
 vi.mock("../src/services/auth.service.js", () => ({ getAuthService: () => mocks.auth }));
 vi.mock("../src/services/profile.service.js", () => ({ getProfileService: () => mocks.profiles }));
+vi.mock("../src/services/settings.service.js", () => ({ getAllowedOrigins: () => mocks.origins }));
 
 const fixture = path.resolve("tests/fixtures/cwd-server.mjs");
 
@@ -74,7 +78,7 @@ describe("resolveProjectDir", () => {
   });
 });
 
-describe("gateway project folders", () => {
+describe("gateway HTTP endpoint", () => {
   let url: string;
   let projectDir: string;
   const clients: Client[] = [];
@@ -154,5 +158,89 @@ describe("gateway project folders", () => {
     // Closing the client ends the bridge, which ends the gateway session
     await client.close();
     expect(await waitForExit(pid)).toBe(true);
+  });
+
+  describe("request sources", () => {
+    const initialize = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "raw", version: "1.0.0" },
+      },
+    });
+
+    afterEach(() => {
+      mocks.origins = [];
+    });
+
+    // node:http, because fetch does not let callers set Host
+    function send(
+      method: string,
+      headers: Record<string, string>
+    ): Promise<{ status: number; headers: http.IncomingHttpHeaders }> {
+      const { port } = new URL(url);
+      return new Promise((resolve, reject) => {
+        const req = http.request(
+          {
+            host: "127.0.0.1",
+            port,
+            path: "/mcp",
+            method,
+            headers: {
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+              ...headers,
+            },
+          },
+          (res) => {
+            res.resume();
+            res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers }));
+          }
+        );
+        req.on("error", reject);
+        req.end(method === "POST" ? initialize : undefined);
+      });
+    }
+
+    it("rejects web pages whose Origin is not allowlisted", async () => {
+      const origin = "https://evil.example";
+      for (const method of ["POST", "OPTIONS"]) {
+        const res = await send(method, { host: "localhost", origin });
+        expect(res.status).toBe(403);
+        expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+      }
+    });
+
+    it("rejects a non-local Host (DNS rebinding)", async () => {
+      expect((await send("POST", { host: "evil.example:8850" })).status).toBe(403);
+    });
+
+    it("accepts clients without an Origin, and allowlisted origins with CORS headers", async () => {
+      const plain = await send("POST", { host: "127.0.0.1" });
+      expect(plain.status).toBe(200);
+      expect(plain.headers["access-control-allow-origin"]).toBeUndefined();
+
+      mocks.origins = ["http://localhost:6274"];
+      const origin = "http://localhost:6274";
+      const preflight = await send("OPTIONS", { host: "localhost", origin });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers["access-control-allow-origin"]).toBe(origin);
+      const allowed = await send("POST", { host: "localhost", origin });
+      expect(allowed.status).toBe(200);
+      expect(allowed.headers["access-control-expose-headers"]).toBe("mcp-session-id");
+    });
+
+    it("only allows local Host names", () => {
+      for (const host of ["localhost:8850", "127.0.0.1:8850", "[::1]:8850", "localhost"]) {
+        expect(rejectRequestSource(host)).toBeNull();
+      }
+      for (const host of [undefined, "", "evil.example", "127.0.0.1.nip.io:8850", "0.0.0.0:8850"]) {
+        expect(rejectRequestSource(host)).toMatch(/Host not allowed/);
+      }
+      expect(rejectRequestSource("localhost", "null")).toMatch(/Origin not allowed/);
+    });
   });
 });

@@ -238,6 +238,15 @@ Local (STDIO) servers such as Serena, jbcontext, or context-mode read their work
 
 Tool lists come from the shared instances, so clients get them without waiting for project instances to start.
 
+### Request Checks
+
+The gateway listens on `127.0.0.1` only. It also rejects (HTTP 403):
+
+- Requests whose `Host` is not `localhost`, `127.0.0.1`, or `[::1]`, which blocks DNS rebinding.
+- Requests with an `Origin` header not in the `allowedOrigins` setting (empty by default), so web pages open in your browser cannot call your tools. MCP clients that are not browsers send no `Origin`.
+
+CORS headers are sent only to allowlisted origins.
+
 ## Configuration Files
 
 ### Main Configuration

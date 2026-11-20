@@ -28,6 +28,7 @@ import { getConfigService } from "./config.service.js";
 import { getAuthService } from "./auth.service.js";
 import { getEnvironmentService } from "./environment.service.js";
 import { getProfileService } from "./profile.service.js";
+import { getAllowedOrigins } from "./settings.service.js";
 import { createTransportAuthProvider } from "./oauth-transport.provider.js";
 import fs from "node:fs";
 import os from "node:os";
@@ -55,6 +56,25 @@ export function resolveProjectDir(candidates: (string | undefined)[]): string | 
     } catch {}
   }
   return undefined;
+}
+
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Why a request may not reach the gateway, or null if it may. Blocks DNS rebinding
+ * (Host must be local) and web pages (an Origin must be allowlisted). MCP clients
+ * that are not browsers send no Origin.
+ */
+export function rejectRequestSource(host?: string, origin?: string): string | null {
+  let hostname: string | undefined;
+  try {
+    hostname = host ? new URL(`http://${host}`).hostname : undefined;
+  } catch {}
+  if (!hostname || !LOCAL_HOSTNAMES.has(hostname)) return `Host not allowed: ${host ?? "(none)"}`;
+  if (origin !== undefined && !getAllowedOrigins().includes(origin)) {
+    return `Origin not allowed: ${origin}. Allow it with: mcpsm settings set allowedOrigins ${origin}`;
+  }
+  return null;
 }
 
 type RemoteTransport = SSEClientTransport | StreamableHTTPClientTransport;
@@ -678,13 +698,25 @@ export async function startGateway(
 
     // Create HTTP server with StreamableHTTP transport
     const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-      // CORS headers
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-      res.setHeader(
-        "Access-Control-Allow-Headers",
-        "Content-Type, mcp-session-id, mcp-protocol-version"
-      );
+      const origin = req.headers.origin;
+      const rejection = rejectRequestSource(req.headers.host, origin);
+      if (rejection) {
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: rejection }));
+        return;
+      }
+
+      // CORS only for allowlisted origins
+      if (origin) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Vary", "Origin");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+        res.setHeader(
+          "Access-Control-Allow-Headers",
+          "Content-Type, mcp-session-id, mcp-protocol-version"
+        );
+        res.setHeader("Access-Control-Expose-Headers", "mcp-session-id");
+      }
 
       if (req.method === "OPTIONS") {
         res.writeHead(204);

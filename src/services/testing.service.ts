@@ -187,11 +187,16 @@ export class TestingService {
           envService.shouldUseZsh() &&
           (server.command.includes("/") || server.command === "sh" || server.command === "bash")
         ) {
-          // Run command through zsh
-          const fullCommand = server.args
-            ? `${server.command} ${server.args.join(" ")}`
-            : server.command;
-          proc = spawn(shellCommand, ["-c", fullCommand], {
+          // The command and its args are positional parameters, so the shell
+          // never parses them as syntax (spaces, globs and $() stay literal).
+          const shellArgs = [
+            "-c",
+            'exec "$@"',
+            "mcpsm",
+            envService.expandHome(server.command),
+            ...(server.args ?? []),
+          ];
+          proc = spawn(shellCommand, shellArgs, {
             env: { ...process.env, ...(server.env || {}) },
             stdio: ["pipe", "pipe", "pipe"],
           });

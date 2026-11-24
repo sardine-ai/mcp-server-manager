@@ -34,6 +34,7 @@ const envMocks = vi.hoisted(() => ({
   service: {
     getShellCommand: vi.fn(),
     shouldUseZsh: vi.fn(),
+    expandHome: vi.fn((command: string) => command),
   },
 }));
 
@@ -294,11 +295,43 @@ describe("TestingService unit coverage", () => {
     });
     expect(childProcessMocks.spawn).toHaveBeenCalledWith(
       "/bin/zsh",
-      ["-c", "/usr/local/bin/start-server --stdio"],
+      ["-c", 'exec "$@"', "mcpsm", "/usr/local/bin/start-server", "--stdio"],
       {
         env: expect.objectContaining({ API_KEY: "secret" }),
         stdio: ["pipe", "pipe", "pipe"],
       }
+    );
+  });
+
+  it("passes args with spaces and shell metacharacters literally", async () => {
+    envMocks.service.shouldUseZsh.mockReturnValue(true);
+    const process = createProcess();
+    childProcessMocks.spawn.mockReturnValue(process);
+
+    const resultPromise = service.testLocalServer(
+      localServer({
+        command: "/usr/local/bin/start-server",
+        args: ["--dir", "/Users/me/My Projects", "--pattern", "*.ts", "--note", "$(whoami)"],
+      })
+    );
+    process.emit("close", 1);
+
+    await resultPromise;
+    expect(childProcessMocks.spawn).toHaveBeenCalledWith(
+      "/bin/zsh",
+      [
+        "-c",
+        'exec "$@"',
+        "mcpsm",
+        "/usr/local/bin/start-server",
+        "--dir",
+        "/Users/me/My Projects",
+        "--pattern",
+        "*.ts",
+        "--note",
+        "$(whoami)",
+      ],
+      expect.any(Object)
     );
   });
 

@@ -3,6 +3,8 @@
  */
 
 import { execSync } from "child_process";
+import os from "os";
+import path from "path";
 import { createLogger } from "../shared/logger.js";
 
 const log = createLogger("EnvironmentService");
@@ -87,6 +89,16 @@ export class EnvironmentService {
   /** Check if zsh is available and should be used */
   shouldUseZsh(): boolean {
     return this.detectShell().isZsh;
+  }
+
+  /**
+   * Expand a leading ~ in a server command. Commands are spawned without a
+   * shell word-splitting them, so this has to happen here.
+   */
+  expandHome(command: string): string {
+    if (command === "~") return os.homedir();
+    if (command.startsWith("~/")) return path.join(os.homedir(), command.slice(2));
+    return command;
   }
 
   /** Get shell environment variables */

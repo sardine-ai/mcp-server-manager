@@ -250,20 +250,27 @@ async function connectLocalServer(
     // Use shell wrapping to ensure PATH resolution
     // This ensures commands like npx, uvx are found even with limited PATH
     const shellCommand = envService.getShellCommand();
-    const fullCommand =
-      server.args && server.args.length > 0
-        ? `${server.command} ${server.args.join(" ")}`
-        : server.command;
 
     // Prepend the current Node's bin dir inside the command so it takes
     // effect after the login shell finishes sourcing profile scripts.
     // This ensures npx/node resolve to the same version that started mcpsm.
+    // The command and its args ride along as positional parameters so the
+    // shell never parses them as syntax (spaces, globs and $() stay literal).
     const nodeBinDir = path.dirname(process.execPath);
-    const wrappedCommand = `export PATH="${nodeBinDir}:$PATH" && ${fullCommand}`;
+    const wrappedCommand = 'export PATH="$1:$PATH"; shift; exec "$@"';
 
     const transport = new StdioClientTransport({
       command: shellCommand, // e.g., "/bin/zsh" or "/bin/bash"
-      args: ["-l", "-c", wrappedCommand], // -l = login shell (loads full PATH)
+      // -l = login shell (loads full PATH). "mcpsm" is the placeholder for $0.
+      args: [
+        "-l",
+        "-c",
+        wrappedCommand,
+        "mcpsm",
+        nodeBinDir,
+        envService.expandHome(server.command),
+        ...(server.args ?? []),
+      ],
       env: { ...process.env, ...(server.env || {}), ...(cwd && { PWD: cwd }) } as Record<
         string,
         string

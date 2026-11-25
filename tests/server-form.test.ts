@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   createServerFormFields,
   getScopes,
-  parseArgs,
   prepareLocalServer,
   prepareLocalServerUpdates,
   prepareRemoteServer,
@@ -14,6 +13,7 @@ import {
   REMOTE_STEPS,
   REMOTE_OAUTH_STEPS,
 } from "../src/tui/screens/server-form.js";
+import { parseArgsInput } from "../src/shared/args.js";
 import { REDACTED_PLACEHOLDER } from "../src/shared/redaction.js";
 
 describe("server-form helpers", () => {
@@ -29,9 +29,9 @@ describe("server-form helpers", () => {
     expect(REMOTE_OAUTH_STEPS).toContain(Step.AuthServer);
   });
 
-  it("parses command args, scopes, and bearer tokens", () => {
-    expect(parseArgs("  npx   -y   server  ")).toEqual(["npx", "-y", "server"]);
-    expect(parseArgs("   ")).toEqual([]);
+  it("keeps quoted args together through the form", () => {
+    expect(parseArgsInput('--dir "/tmp/my projects"')).toEqual(["--dir", "/tmp/my projects"]);
+    expect(parseArgsInput("   ")).toEqual([]);
     expect(getScopes("read, write profile")).toEqual(["read", "write", "profile"]);
     expect(resolveBearerToken(" token ")).toBe("token");
     expect(resolveBearerToken("")).toBeUndefined();

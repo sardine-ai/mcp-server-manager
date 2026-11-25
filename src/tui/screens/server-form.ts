@@ -1,5 +1,6 @@
 import type { LocalServer, RemoteServer, Result, TransportType } from "../../types/index.js";
 import { parseEnvInput, normalizeEnv } from "../../shared/env.js";
+import { parseArgsInput } from "../../shared/args.js";
 import { REDACTED_PLACEHOLDER } from "../../shared/redaction.js";
 
 export enum Step {
@@ -90,11 +91,6 @@ export function createServerFormFields(overrides?: Partial<ServerFormFields>): S
   return { ...DEFAULT_SERVER_FORM_FIELDS, ...overrides };
 }
 
-export function parseArgs(value: string): string[] {
-  const trimmed = value.trim();
-  return trimmed ? trimmed.split(/\s+/).filter(Boolean) : [];
-}
-
 export function getScopes(value: string): string[] {
   return value
     .split(/[ ,]+/)
@@ -169,7 +165,7 @@ export function prepareLocalServer(
     id: serverId,
     name,
     command,
-    args: parseArgs(fields.args),
+    args: parseArgsInput(fields.args),
     ...(normalizedEnv && Object.keys(normalizedEnv).length > 0 ? { env: normalizedEnv } : {}),
   };
 
@@ -196,7 +192,7 @@ export function prepareLocalServerUpdates(fields: ServerFormFields): Result<Part
   const updates: Partial<LocalServer> = {
     name,
     command,
-    args: parseArgs(fields.args),
+    args: parseArgsInput(fields.args),
   };
 
   updates.env = normalizedEnv && Object.keys(normalizedEnv).length > 0 ? normalizedEnv : undefined;

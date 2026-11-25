@@ -180,6 +180,8 @@ export class TestingService {
         // Get environment service to detect shell
         const envService = getEnvironmentService();
         const shellCommand = envService.getShellCommand();
+        const env = { ...process.env, ...(server.env || {}) };
+        const command = envService.expandHome(server.command, env.HOME);
 
         // If we have zsh available and the command is a shell script or uses shell features,
         // run it through zsh for better compatibility
@@ -189,21 +191,15 @@ export class TestingService {
         ) {
           // The command and its args are positional parameters, so the shell
           // never parses them as syntax (spaces, globs and $() stay literal).
-          const shellArgs = [
-            "-c",
-            'exec "$@"',
-            "mcpsm",
-            envService.expandHome(server.command),
-            ...(server.args ?? []),
-          ];
+          const shellArgs = ["-c", 'exec "$@"', "mcpsm", command, ...(server.args ?? [])];
           proc = spawn(shellCommand, shellArgs, {
-            env: { ...process.env, ...(server.env || {}) },
+            env,
             stdio: ["pipe", "pipe", "pipe"],
           });
         } else {
           // Use direct spawn as before
-          proc = spawn(server.command, server.args, {
-            env: { ...process.env, ...(server.env || {}) },
+          proc = spawn(command, server.args, {
+            env,
             stdio: ["pipe", "pipe", "pipe"],
           });
         }

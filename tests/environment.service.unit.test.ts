@@ -118,6 +118,15 @@ describe("EnvironmentService", () => {
     expect(service.expandHome("a~/b")).toBe("a~/b");
   });
 
+  it("expands ~ against the server's own HOME when it overrides one", () => {
+    process.env.SHELL = "/bin/sh";
+    const service = new EnvironmentService();
+
+    expect(service.expandHome("~/bin/server", "/srv/mcp")).toBe("/srv/mcp/bin/server");
+    expect(service.expandHome("~", "/srv/mcp")).toBe("/srv/mcp");
+    expect(service.expandHome("/usr/bin/node", "/srv/mcp")).toBe("/usr/bin/node");
+  });
+
   it("parses environment variables from an interactive zsh", () => {
     process.env.SHELL = "/bin/zsh";
     execSyncMock.mockReturnValue("FOO=bar\nWITH_EQUALS=a=b\nIGNORED\n=bad\n");

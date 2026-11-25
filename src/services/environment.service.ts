@@ -93,11 +93,12 @@ export class EnvironmentService {
 
   /**
    * Expand a leading ~ in a server command. Commands are spawned without a
-   * shell word-splitting them, so this has to happen here.
+   * shell word-splitting them, so this has to happen here. `home` is the
+   * server's effective home, since a server may override HOME.
    */
-  expandHome(command: string): string {
-    if (command === "~") return os.homedir();
-    if (command.startsWith("~/")) return path.join(os.homedir(), command.slice(2));
+  expandHome(command: string, home: string = os.homedir()): string {
+    if (command === "~") return home;
+    if (command.startsWith("~/")) return path.join(home, command.slice(2));
     return command;
   }
 

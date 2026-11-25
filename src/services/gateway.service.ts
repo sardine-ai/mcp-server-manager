@@ -258,6 +258,11 @@ async function connectLocalServer(
     // shell never parses them as syntax (spaces, globs and $() stay literal).
     const nodeBinDir = path.dirname(process.execPath);
     const wrappedCommand = 'export PATH="$1:$PATH"; shift; exec "$@"';
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      ...(server.env || {}),
+      ...(cwd && { PWD: cwd }),
+    };
 
     const transport = new StdioClientTransport({
       command: shellCommand, // e.g., "/bin/zsh" or "/bin/bash"
@@ -268,13 +273,10 @@ async function connectLocalServer(
         wrappedCommand,
         "mcpsm",
         nodeBinDir,
-        envService.expandHome(server.command),
+        envService.expandHome(server.command, env.HOME),
         ...(server.args ?? []),
       ],
-      env: { ...process.env, ...(server.env || {}), ...(cwd && { PWD: cwd }) } as Record<
-        string,
-        string
-      >,
+      env: env as Record<string, string>,
       cwd,
     });
 

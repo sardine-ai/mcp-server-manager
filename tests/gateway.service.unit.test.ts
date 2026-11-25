@@ -117,7 +117,7 @@ const serviceMocks = vi.hoisted(() => ({
   },
   envService: {
     getShellCommand: vi.fn(),
-    expandHome: vi.fn((command: string) => command),
+    expandHome: vi.fn((command: string, _home?: string) => command),
   },
   profileService: {
     reload: vi.fn(),

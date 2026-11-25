@@ -6,6 +6,7 @@ import { Command } from "commander";
 import { colors, c } from "../../shared/colors.js";
 import { outputJson } from "../../shared/formatters.js";
 import { parseEnvInput, normalizeEnv } from "../../shared/env.js";
+import { parseArgsInput } from "../../shared/args.js";
 import { getConfigService } from "../../services/config.service.js";
 import { getTestingService } from "../../services/testing.service.js";
 import { getAuthService } from "../../services/auth.service.js";
@@ -182,7 +183,7 @@ export function registerServerCommands(program: Command): void {
 
         let args: string[] = [];
         if (options.args) {
-          args = options.args.split(/[\s,]+/).filter(Boolean);
+          args = parseArgsInput(options.args, { commaSeparated: true });
         }
 
         const parsedEnv = parseEnvInput(options.env);
@@ -434,7 +435,7 @@ export function registerServerCommands(program: Command): void {
         const updates: Partial<LocalServer> = {};
         if (options.name) updates.name = options.name;
         if (options.command) updates.command = options.command;
-        if (options.args) updates.args = options.args.split(/[\s,]+/).filter(Boolean);
+        if (options.args) updates.args = parseArgsInput(options.args, { commaSeparated: true });
         if (options.env !== undefined) {
           const parsedEnv = parseEnvInput(options.env);
           if (!parsedEnv.success) {

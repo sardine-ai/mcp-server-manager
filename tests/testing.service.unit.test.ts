@@ -34,7 +34,7 @@ const envMocks = vi.hoisted(() => ({
   service: {
     getShellCommand: vi.fn(),
     shouldUseZsh: vi.fn(),
-    expandHome: vi.fn((command: string) => command),
+    expandHome: vi.fn((command: string, _home?: string) => command),
   },
 }));
 
@@ -202,6 +202,7 @@ function resetMocks(): void {
 
   envMocks.service.getShellCommand.mockReturnValue("/bin/zsh");
   envMocks.service.shouldUseZsh.mockReturnValue(false);
+  envMocks.service.expandHome.mockImplementation((command: string, _home?: string) => command);
 
   childProcessMocks.spawn.mockReset();
   sdkMocks.Client.mockClear();
@@ -332,6 +333,44 @@ describe("TestingService unit coverage", () => {
         "$(whoami)",
       ],
       expect.any(Object)
+    );
+  });
+
+  it("expands a tilde command against the server's HOME override", async () => {
+    envMocks.service.shouldUseZsh.mockReturnValue(true);
+    const process = createProcess();
+    childProcessMocks.spawn.mockReturnValue(process);
+
+    const resultPromise = service.testLocalServer(
+      localServer({
+        command: "~/bin/server",
+        args: [],
+        env: { HOME: "/srv/mcp" },
+      })
+    );
+    process.emit("close", 1);
+
+    await resultPromise;
+    expect(envMocks.service.expandHome).toHaveBeenCalledWith("~/bin/server", "/srv/mcp");
+  });
+
+  it("expands a tilde command on the direct spawn path too", async () => {
+    envMocks.service.expandHome.mockImplementation((command: string, home?: string) =>
+      command === "~/bin/server" && home ? `${home}/bin/server` : command
+    );
+    const process = createProcess();
+    childProcessMocks.spawn.mockReturnValue(process);
+
+    const resultPromise = service.testLocalServer(
+      localServer({ command: "~/bin/server", args: [], env: { HOME: "/srv/mcp" } })
+    );
+    process.emit("close", 1);
+
+    await resultPromise;
+    expect(childProcessMocks.spawn).toHaveBeenCalledWith(
+      "/srv/mcp/bin/server",
+      [],
+      expect.objectContaining({ env: expect.objectContaining({ HOME: "/srv/mcp" }) })
     );
   });
 

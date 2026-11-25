@@ -53,8 +53,8 @@ describe("formatArgsInput", () => {
   });
 
   it("quotes args the parser would otherwise split", () => {
-    expect(formatArgsInput(["--dir", "/tmp/my projects"])).toBe("--dir '/tmp/my projects'");
-    expect(formatArgsInput(["--note", ""])).toBe("--note ''");
+    expect(formatArgsInput(["--dir", "/tmp/my projects"])).toBe('--dir "/tmp/my projects"');
+    expect(formatArgsInput(["--note", ""])).toBe('--note ""');
   });
 
   it("round-trips through the parser", () => {
@@ -74,5 +74,22 @@ describe("formatArgsInput", () => {
     const args = ["--dir", "/tmp/my projects", "--note", "a,b"];
     const input = formatArgsInput(args, { commaSeparated: true });
     expect(parseArgsInput(input, { commaSeparated: true })).toEqual(args);
+  });
+
+  it("round-trips args that contain both quote characters", () => {
+    for (const arg of [`has 'single' and "double"`, `a'b "c`, `x"y 'z`]) {
+      expect(parseArgsInput(formatArgsInput([arg]))).toEqual([arg]);
+    }
+  });
+
+  it("round-trips backslashes without eating them", () => {
+    for (const arg of ["C:\\path with space", "end with backslash\\", "\\\\"]) {
+      expect(parseArgsInput(formatArgsInput([arg]))).toEqual([arg]);
+    }
+  });
+
+  it("unescapes a quote inside a quoted run", () => {
+    expect(parseArgsInput(`'a\\'b'`)).toEqual(["a'b"]);
+    expect(parseArgsInput(`"say \\"hi\\""`)).toEqual(['say "hi"']);
   });
 });

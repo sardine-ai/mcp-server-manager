@@ -34,6 +34,7 @@ const envMocks = vi.hoisted(() => ({
   service: {
     getShellCommand: vi.fn(),
     shouldUseZsh: vi.fn(),
+    expandHome: vi.fn((command: string, _home?: string) => command),
   },
 }));
 
@@ -201,6 +202,7 @@ function resetMocks(): void {
 
   envMocks.service.getShellCommand.mockReturnValue("/bin/zsh");
   envMocks.service.shouldUseZsh.mockReturnValue(false);
+  envMocks.service.expandHome.mockImplementation((command: string, _home?: string) => command);
 
   childProcessMocks.spawn.mockReset();
   sdkMocks.Client.mockClear();
@@ -294,11 +296,81 @@ describe("TestingService unit coverage", () => {
     });
     expect(childProcessMocks.spawn).toHaveBeenCalledWith(
       "/bin/zsh",
-      ["-c", "/usr/local/bin/start-server --stdio"],
+      ["-c", 'exec "$@"', "mcpsm", "/usr/local/bin/start-server", "--stdio"],
       {
         env: expect.objectContaining({ API_KEY: "secret" }),
         stdio: ["pipe", "pipe", "pipe"],
       }
+    );
+  });
+
+  it("passes args with spaces and shell metacharacters literally", async () => {
+    envMocks.service.shouldUseZsh.mockReturnValue(true);
+    const process = createProcess();
+    childProcessMocks.spawn.mockReturnValue(process);
+
+    const resultPromise = service.testLocalServer(
+      localServer({
+        command: "/usr/local/bin/start-server",
+        args: ["--dir", "/Users/me/My Projects", "--pattern", "*.ts", "--note", "$(whoami)"],
+      })
+    );
+    process.emit("close", 1);
+
+    await resultPromise;
+    expect(childProcessMocks.spawn).toHaveBeenCalledWith(
+      "/bin/zsh",
+      [
+        "-c",
+        'exec "$@"',
+        "mcpsm",
+        "/usr/local/bin/start-server",
+        "--dir",
+        "/Users/me/My Projects",
+        "--pattern",
+        "*.ts",
+        "--note",
+        "$(whoami)",
+      ],
+      expect.any(Object)
+    );
+  });
+
+  it("expands a tilde command against the server's HOME override", async () => {
+    envMocks.service.shouldUseZsh.mockReturnValue(true);
+    const process = createProcess();
+    childProcessMocks.spawn.mockReturnValue(process);
+
+    const resultPromise = service.testLocalServer(
+      localServer({
+        command: "~/bin/server",
+        args: [],
+        env: { HOME: "/srv/mcp" },
+      })
+    );
+    process.emit("close", 1);
+
+    await resultPromise;
+    expect(envMocks.service.expandHome).toHaveBeenCalledWith("~/bin/server", "/srv/mcp");
+  });
+
+  it("expands a tilde command on the direct spawn path too", async () => {
+    envMocks.service.expandHome.mockImplementation((command: string, home?: string) =>
+      command === "~/bin/server" && home ? `${home}/bin/server` : command
+    );
+    const process = createProcess();
+    childProcessMocks.spawn.mockReturnValue(process);
+
+    const resultPromise = service.testLocalServer(
+      localServer({ command: "~/bin/server", args: [], env: { HOME: "/srv/mcp" } })
+    );
+    process.emit("close", 1);
+
+    await resultPromise;
+    expect(childProcessMocks.spawn).toHaveBeenCalledWith(
+      "/srv/mcp/bin/server",
+      [],
+      expect.objectContaining({ env: expect.objectContaining({ HOME: "/srv/mcp" }) })
     );
   });
 

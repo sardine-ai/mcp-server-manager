@@ -117,6 +117,7 @@ const serviceMocks = vi.hoisted(() => ({
   },
   envService: {
     getShellCommand: vi.fn(),
+    expandHome: vi.fn((command: string, _home?: string) => command),
   },
   profileService: {
     reload: vi.fn(),
@@ -322,7 +323,15 @@ describe("GatewayService unit coverage", () => {
     });
     expect(sdkMocks.StdioClientTransport).toHaveBeenCalledWith({
       command: "/bin/zsh",
-      args: ["-l", "-c", expect.stringContaining("node server.js")],
+      args: [
+        "-l",
+        "-c",
+        'export PATH="$1:$PATH"; shift; exec "$@"',
+        "mcpsm",
+        path.dirname(process.execPath),
+        "node",
+        "server.js",
+      ],
       env: expect.objectContaining({ API_KEY: "secret" }),
     });
     expect(sdkMocks.StreamableHTTPClientTransport).toHaveBeenCalledWith(

@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import os from "os";
+import path from "path";
 
 const execSyncMock = vi.hoisted(() => vi.fn());
 
@@ -103,6 +105,26 @@ describe("EnvironmentService", () => {
       isZsh: false,
     });
     expect(service.getShellCommand()).toBe("bash");
+  });
+
+  it("expands a leading ~ in a server command", () => {
+    process.env.SHELL = "/bin/sh";
+    const service = new EnvironmentService();
+
+    expect(service.expandHome("~")).toBe(os.homedir());
+    expect(service.expandHome("~/bin/server")).toBe(path.join(os.homedir(), "bin/server"));
+    expect(service.expandHome("/usr/bin/node")).toBe("/usr/bin/node");
+    expect(service.expandHome("node")).toBe("node");
+    expect(service.expandHome("a~/b")).toBe("a~/b");
+  });
+
+  it("expands ~ against the server's own HOME when it overrides one", () => {
+    process.env.SHELL = "/bin/sh";
+    const service = new EnvironmentService();
+
+    expect(service.expandHome("~/bin/server", "/srv/mcp")).toBe("/srv/mcp/bin/server");
+    expect(service.expandHome("~", "/srv/mcp")).toBe("/srv/mcp");
+    expect(service.expandHome("/usr/bin/node", "/srv/mcp")).toBe("/usr/bin/node");
   });
 
   it("parses environment variables from an interactive zsh", () => {

@@ -12,6 +12,7 @@ import { getConfigService } from "../../services/config.service.js";
 import { getDaemonService } from "../../services/daemon.service.js";
 import type { LocalServer, RemoteServer, TransportType } from "../../types/index.js";
 import { REDACTED_PLACEHOLDER } from "../../shared/redaction.js";
+import { formatArgsInput } from "../../shared/args.js";
 import { useTheme } from "../theme/index.js";
 import {
   createServerFormFields,
@@ -50,7 +51,7 @@ export function EditServerScreen({
         serverId: server.id,
         serverType: type === "local" ? "stdio" : (server as RemoteServer).type,
         command: type === "local" ? (server as LocalServer).command : "",
-        args: type === "local" ? (server as LocalServer).args.join(" ") : "",
+        args: type === "local" ? formatArgsInput((server as LocalServer).args) : "",
         env:
           type === "local" && (server as LocalServer).env
             ? Object.entries((server as LocalServer).env!)

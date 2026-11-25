@@ -54,20 +54,20 @@ mcpsm add <name> --type <stdio|http|sse> [options]
 
 ### Options
 
-| Option                | Description                                           |
-| --------------------- | ----------------------------------------------------- |
-| `--type <type>`       | Server type: `stdio`, `http`, or `sse` (required)     |
-| `--command <cmd>`     | Command to run (stdio only)                           |
-| `--args <args>`       | Command arguments (stdio only, space/comma separated) |
-| `--env <env...>`      | Env vars for stdio servers (`KEY=VAL`, space/comma)   |
-| `--url <url>`         | Server URL (http/sse only)                            |
-| `--token <token>`     | Bearer token for auth (http/sse only)                 |
-| `--oauth`             | Enable OAuth for http/sse servers                     |
-| `--client-id <id>`    | OAuth client ID (remote only)                         |
-| `--client-secret <s>` | OAuth client secret (remote only)                     |
-| `--scopes <scopes>`   | OAuth scopes, comma-separated (remote only)           |
-| `--auth-server <url>` | OAuth authorization server URL (remote only)          |
-| `--test`              | Test the server immediately after adding              |
+| Option                | Description                                                         |
+| --------------------- | ------------------------------------------------------------------- |
+| `--type <type>`       | Server type: `stdio`, `http`, or `sse` (required)                   |
+| `--command <cmd>`     | Command to run (stdio only)                                         |
+| `--args <args>`       | Command arguments (stdio only, space/comma separated, quotes group) |
+| `--env <env...>`      | Env vars for stdio servers (`KEY=VAL`, space/comma)                 |
+| `--url <url>`         | Server URL (http/sse only)                                          |
+| `--token <token>`     | Bearer token for auth (http/sse only)                               |
+| `--oauth`             | Enable OAuth for http/sse servers                                   |
+| `--client-id <id>`    | OAuth client ID (remote only)                                       |
+| `--client-secret <s>` | OAuth client secret (remote only)                                   |
+| `--scopes <scopes>`   | OAuth scopes, comma-separated (remote only)                         |
+| `--auth-server <url>` | OAuth authorization server URL (remote only)                        |
+| `--test`              | Test the server immediately after adding                            |
 
 ### Examples
 
@@ -85,6 +85,10 @@ mcpsm auth login asana
 # Add SSE server with bearer token
 mcpsm add stream-api -t sse -u "https://api.example.com/mcp/sse" --token "mytoken"
 ```
+
+Arguments are passed to the server exactly as stored. Quotes group a value that contains spaces, and nothing inside them is expanded, so `-a '--note "$(whoami)"'` sends the literal text `$(whoami)`.
+
+Servers added before arguments were passed literally may have stored fragments like `["--dir", "\"/tmp/my", "projects\""]`. Re-run `mcpsm edit <server> --args '--dir "/tmp/my projects"'` to fix those.
 
 ---
 

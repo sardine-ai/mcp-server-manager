@@ -15,7 +15,8 @@ const mockAuthService = {
   isTokenExpired: vi.fn(() => false),
   isRefreshable: vi.fn(() => false),
   ensureValidToken: vi.fn(() => Promise.resolve(false)),
-  getToken: vi.fn(),
+  getStoredToken: vi.fn(),
+  getTokenForServer: vi.fn(),
   getTokenPreview: vi.fn(),
   getValidToken: vi.fn(() => Promise.resolve("refreshed-token")),
   startOAuthFlow: vi.fn(),
@@ -24,7 +25,6 @@ const mockAuthService = {
   refreshToken: vi.fn(),
   removeToken: vi.fn(),
   clearAllTokens: vi.fn(),
-  getAllStoredTokenServerIds: vi.fn(() => []),
 };
 
 const mockTestingService = {
@@ -35,6 +35,8 @@ const mockDaemonService = {
   startDaemon: vi.fn(),
   stopDaemon: vi.fn(),
   refreshDaemon: vi.fn(),
+  claimPidFile: vi.fn(),
+  clearPidFile: vi.fn(),
   getStatus: vi.fn(() => ({
     running: false,
     pid: null,
@@ -122,7 +124,7 @@ describe("CLI auth/daemon commands", () => {
     mockConfigService.findRemoteServer.mockReturnValue(remoteServer);
     mockConfigService.findLocalServer.mockReturnValue(localServer);
 
-    mockAuthService.getToken.mockReturnValue({ accessToken: "tok", refreshToken: "refresh" });
+    mockAuthService.getStoredToken.mockReturnValue({ accessToken: "tok", refreshToken: "refresh" });
     mockAuthService.startOAuthFlow.mockResolvedValue({ authUrl: "https://auth", state: "state1" });
     mockAuthService.waitForAuth.mockResolvedValue({ success: true });
     mockAuthService.ensureValidToken.mockResolvedValue(false);
@@ -173,7 +175,10 @@ describe("CLI auth/daemon commands", () => {
     await program.parseAsync(["node", "test", "auth", "logout", remoteServer.id, "--force"]);
     expect(mockAuthService.removeToken).toHaveBeenCalledWith(remoteServer.id);
 
-    mockAuthService.getToken.mockReturnValue({ accessToken: "tok", refreshToken: "refresh" });
+    mockAuthService.getTokenForServer.mockReturnValue({
+      accessToken: "tok",
+      refreshToken: "refresh",
+    });
     await program.parseAsync(["node", "test", "auth", "refresh", remoteServer.id]);
     expect(mockAuthService.refreshToken).toHaveBeenCalled();
 
@@ -219,7 +224,7 @@ describe("CLI auth/daemon commands", () => {
     mockAuthService.isTokenExpired.mockReturnValue(true);
     mockAuthService.isRefreshable.mockReturnValue(true);
     mockAuthService.ensureValidToken.mockResolvedValue(true);
-    mockAuthService.getToken.mockReturnValue({
+    mockAuthService.getTokenForServer.mockReturnValue({
       accessToken: "tok",
       tokenType: "Bearer",
       expiresAt: Date.now() + 30 * 60 * 1000,
@@ -279,9 +284,18 @@ describe("CLI auth/daemon commands", () => {
   it("handles auth logout, login-all, and refresh edge cases", async () => {
     const program = buildAuthProgram();
 
-    mockAuthService.hasValidToken.mockReturnValue(false);
+    mockAuthService.getStoredToken.mockReturnValue(null);
     await program.parseAsync(["node", "test", "auth", "logout", remoteServer.id, "--force"]);
     expect(mockAuthService.removeToken).not.toHaveBeenCalled();
+
+    // An expired access token still has a refresh token and client secret to revoke
+    mockAuthService.getStoredToken.mockReturnValue({
+      accessToken: "expired",
+      tokenType: "Bearer",
+      expiresAt: 0,
+    });
+    await program.parseAsync(["node", "test", "auth", "logout", remoteServer.id, "--force"]);
+    expect(mockAuthService.removeToken).toHaveBeenCalledWith(remoteServer.id);
 
     mockConfigService.getRemoteServers.mockReturnValueOnce([]);
     await program.parseAsync(["node", "test", "auth", "login-all", "--no-browser"]);
@@ -303,17 +317,20 @@ describe("CLI auth/daemon commands", () => {
     mockAuthService.waitForAuth.mockResolvedValueOnce({ success: false, error: "denied" });
     await program.parseAsync(["node", "test", "auth", "login-all", "--no-browser"]);
 
-    mockAuthService.getToken.mockReturnValueOnce(null);
+    mockAuthService.getTokenForServer.mockReturnValueOnce(null);
     await expectProcessExit(() =>
       program.parseAsync(["node", "test", "auth", "refresh", remoteServer.id])
     );
 
-    mockAuthService.getToken.mockReturnValueOnce({ accessToken: "tok", tokenType: "Bearer" });
+    mockAuthService.getTokenForServer.mockReturnValueOnce({
+      accessToken: "tok",
+      tokenType: "Bearer",
+    });
     await expectProcessExit(() =>
       program.parseAsync(["node", "test", "auth", "refresh", remoteServer.id])
     );
 
-    mockAuthService.getToken.mockReturnValueOnce({
+    mockAuthService.getTokenForServer.mockReturnValueOnce({
       accessToken: "tok",
       refreshToken: "refresh",
       tokenType: "Bearer",

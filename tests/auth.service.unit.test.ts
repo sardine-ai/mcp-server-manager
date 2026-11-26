@@ -361,14 +361,13 @@ describe("AuthService unit coverage", () => {
     );
     service.saveTokensForServer("valid", token({ accessToken: "long-access-token" }));
 
-    expect(service.getAllStoredTokenServerIds().sort()).toEqual(["expired", "short", "valid"]);
-    expect(service.getTokenPreview("short")).toBe("****");
-    expect(service.getTokenPreview("valid")).toBe("long...oken");
-    expect(service.getTokenPreview("missing")).toBeNull();
-    expect(service.hasValidToken("valid")).toBe(true);
-    expect(service.hasValidToken("expired")).toBe(false);
-    expect(service.isTokenExpired("expired")).toBe(true);
-    expect(service.isRefreshable("expired")).toBe(true);
+    expect(service.getTokenPreview(remoteServer({ id: "short" }))).toBe("****");
+    expect(service.getTokenPreview(remoteServer({ id: "valid" }))).toBe("long...oken");
+    expect(service.getTokenPreview(remoteServer({ id: "missing" }))).toBeNull();
+    expect(service.hasValidToken(remoteServer({ id: "valid" }))).toBe(true);
+    expect(service.hasValidToken(remoteServer({ id: "expired" }))).toBe(false);
+    expect(service.isTokenExpired(remoteServer({ id: "expired" }))).toBe(true);
+    expect(service.isRefreshable(remoteServer({ id: "expired" }))).toBe(true);
     expect(service.serverRequiresOAuth(remoteServer({ oauth: { enabled: true } }))).toBe(true);
 
     const internals = service as unknown as AuthServiceInternals;
@@ -384,9 +383,48 @@ describe("AuthService unit coverage", () => {
     expect(service.getPendingAuthServers()).toEqual([]);
 
     service.removeToken("short");
-    expect(service.getToken("short")).toBeNull();
+    expect(service.getStoredToken("short")).toBeNull();
     service.clearAllTokens();
-    expect(service.getAllStoredTokenServerIds()).toEqual([]);
+  });
+
+  it("binds stored credentials to the URL they were issued for", () => {
+    const issued = token({ resourceUrl: "https://api.test/mcp" });
+    service.saveTokensForServer("remote", issued);
+
+    expect(service.getTokenForServer(remoteServer())).toEqual(issued);
+    expect(service.getTokenForServer(remoteServer({ url: "https://api.test/mcp/" }))).toEqual(
+      issued
+    );
+    expect(service.getTokenForServer(remoteServer({ url: "https://API.test/mcp" }))).toEqual(
+      issued
+    );
+    expect(
+      service.getTokenForServer(remoteServer({ url: "https://api.test/mcp?tenant=other" }))
+    ).toBeNull();
+    expect(service.getTokenForServer(remoteServer({ url: "https://other.test/mcp" }))).toBeNull();
+    expect(service.getStoredToken("remote")).toEqual(issued);
+  });
+
+  it("never refreshes credentials issued for another URL", async () => {
+    service.saveTokensForServer(
+      "remote",
+      token({
+        accessToken: "",
+        refreshToken: "refresh-token",
+        expiresAt: 0,
+        resourceUrl: "https://api.test/mcp",
+      })
+    );
+    const refreshSpy = vi.spyOn(service, "refreshTokenWithMutex").mockResolvedValue(null);
+
+    const moved = remoteServer({ url: "https://other.test/mcp" });
+    await expect(service.getValidToken(moved)).resolves.toBeNull();
+    await expect(service.ensureValidToken(moved)).resolves.toBe(false);
+    expect(refreshSpy).not.toHaveBeenCalled();
+
+    // The same stored record still refreshes for the URL it belongs to
+    await expect(service.ensureValidToken(remoteServer())).resolves.toBe(false);
+    expect(refreshSpy).toHaveBeenCalled();
   });
 
   it("gets valid tokens directly or through refresh when close to expiry", async () => {
@@ -593,7 +631,7 @@ describe("AuthService unit coverage", () => {
     await expect(requestText(`${redirectUri}?code=code&state=state`)).resolves.toMatchObject({
       status: 200,
     });
-    expect(service.getToken("remote")).toMatchObject({
+    expect(service.getStoredToken("remote")).toMatchObject({
       accessToken: "callback-access",
       refreshToken: "callback-refresh",
       scopes: ["tools.read", "tools.write"],

@@ -920,7 +920,7 @@ export class TestingService {
       onProgress?.(`Checking ${server.name}...`);
 
       // Check if we already have a valid token
-      if (authService.hasValidToken(server.id)) {
+      if (authService.hasValidToken(server)) {
         onProgress?.(`${server.name} already authenticated`);
         skipped.push(server.id);
         continue;

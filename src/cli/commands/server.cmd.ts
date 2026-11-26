@@ -105,9 +105,9 @@ export function registerServerCommands(program: Command): void {
           // OAuth status
           let authStatus = "";
           if (server.oauth?.enabled) {
-            if (authService.hasValidToken(server.id)) {
+            if (authService.hasValidToken(server)) {
               authStatus = ` · ${colors.green}OAuth${colors.reset}`;
-            } else if (authService.isRefreshable(server.id)) {
+            } else if (authService.isRefreshable(server)) {
               const token = await authService.getValidToken(server);
               if (token) {
                 authStatus = ` · ${colors.green}OAuth${colors.reset}`;

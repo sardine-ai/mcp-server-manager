@@ -8,16 +8,49 @@ import type { Command } from "commander";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { isJSONRPCRequest } from "@modelcontextprotocol/sdk/types.js";
-import { PROJECT_DIR_HEADER, resolveProjectDir } from "../../services/gateway.service.js";
+import { getConfigService } from "../../services/config.service.js";
+import {
+  MCP_PROFILE_ROUTE,
+  PROJECT_DIR_HEADER,
+  resolveProjectDir,
+} from "../../services/gateway.service.js";
+
+/**
+ * The target only names the profile to serve. Where the gateway lives comes from settings,
+ * because the target sits in a client config: without this, any app or repo that wrote that
+ * config could make the bridge ship tool calls and results to its own host.
+ */
+export function resolveGatewayUrl(target?: string): URL {
+  const profileId = target ? parseProfileTarget(target) : undefined;
+  const port = getConfigService().getPort();
+  const path = profileId ? `/mcp/${profileId}` : "/mcp";
+  return new URL(`http://127.0.0.1:${port}${path}`);
+}
+
+function parseProfileTarget(target: string): string | undefined {
+  let path: string;
+  try {
+    path = new URL(target).pathname;
+  } catch {
+    throw new Error(`Invalid bridge target: ${target}`);
+  }
+
+  const match = path.replace(/\/+$/, "").match(MCP_PROFILE_ROUTE);
+  if (!match) {
+    throw new Error(`Bridge target must name a profile (/mcp/<id>), got: ${target}`);
+  }
+  return match[1];
+}
 
 // ponytail: no re-initialize if the daemon restarts mid-session; the client restarts the server.
-export async function runBridge(url: string, projectDir?: string): Promise<void> {
+export async function runBridge(target?: string, projectDir?: string): Promise<void> {
   // stdout carries JSON-RPC; keep stray logs off it
   console.log = console.error;
 
+  const url = resolveGatewayUrl(target);
   const headers = projectDir ? { [PROJECT_DIR_HEADER]: encodeURIComponent(projectDir) } : undefined;
   const upstream = new StreamableHTTPClientTransport(
-    new URL(url),
+    url,
     headers ? { requestInit: { headers } } : {}
   );
   const local = new StdioServerTransport();
@@ -56,10 +89,15 @@ export async function runBridge(url: string, projectDir?: string): Promise<void>
 
 export function registerBridgeCommands(program: Command): void {
   program
-    .command("bridge <url>")
+    .command("bridge [target]")
     .description("Stdio bridge to the gateway for the current project (used in client configs)")
     .option("--cwd <dir>", "Project folder when the client does not start the bridge in it")
-    .action(async (url: string, options: { cwd?: string }) => {
-      await runBridge(url, resolveProjectDir([options.cwd, process.cwd()]));
+    .action(async (target: string | undefined, options: { cwd?: string }) => {
+      try {
+        await runBridge(target, resolveProjectDir([options.cwd, process.cwd()]));
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
     });
 }

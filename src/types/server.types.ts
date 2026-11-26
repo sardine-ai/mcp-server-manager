@@ -38,6 +38,8 @@ export interface StoredOAuthTokens {
   tokenType: string;
   /** Scopes granted */
   scopes?: string[];
+  /** URL of the server the token was issued for; guards against reuse after the URL changes */
+  resourceUrl?: string;
 }
 
 /** Base server interface with common properties */

@@ -206,10 +206,10 @@ export function App({ onExit }: AppProps): React.ReactElement {
       for (const server of state.remoteServers) {
         const filter = toolFilters[`remote:${server.id}`];
         if (server.oauth?.enabled) {
-          if (!authService.hasValidToken(server.id) || filterIndicatesAuth(filter)) {
+          if (!authService.hasValidToken(server) || filterIndicatesAuth(filter)) {
             needsAuth.add(server.id);
           }
-          if (authService.isRefreshable(server.id)) {
+          if (authService.isRefreshable(server)) {
             authService.getValidToken(server).then((refreshed) => {
               if (refreshed && isMounted) {
                 setState((prev) => {
@@ -256,7 +256,7 @@ export function App({ onExit }: AppProps): React.ReactElement {
       for (const server of state.remoteServers) {
         const filter = updatedFilters[`remote:${server.id}`];
         if (server.oauth?.enabled) {
-          if (authService.isRefreshable(server.id)) {
+          if (authService.isRefreshable(server)) {
             authService.getValidToken(server).then((refreshed) => {
               if (refreshed && isMounted) {
                 setState((prev) => {
@@ -266,7 +266,7 @@ export function App({ onExit }: AppProps): React.ReactElement {
                 });
               }
             });
-          } else if (!authService.hasValidToken(server.id)) {
+          } else if (!authService.hasValidToken(server)) {
             finalNeedsAuth.add(server.id);
           }
         } else if (filterIndicatesAuth(filter)) {
@@ -341,7 +341,7 @@ export function App({ onExit }: AppProps): React.ReactElement {
     for (const server of state.remoteServers) {
       if (
         server.oauth?.enabled &&
-        (!authService.hasValidToken(server.id) ||
+        (!authService.hasValidToken(server) ||
           filterIndicatesAuth(toolFilters[`remote:${server.id}`]))
       ) {
         needsAuth.add(server.id);

@@ -18,7 +18,6 @@ describe("AuthScreen", () => {
     mockConfigService.getRemoteServers.mockReturnValue(
       sampleRemoteServers.map((s) => ({ ...s, oauth: { enabled: true } }))
     );
-    mockAuthService.getAllStoredTokenServerIds.mockReturnValue([]);
     mockAuthService.isRefreshable.mockReturnValue(false);
   });
 
@@ -26,7 +25,7 @@ describe("AuthScreen", () => {
     mockAuthService.startOAuthFlow.mockResolvedValue({ authUrl: "https://auth", state: "state" });
     mockAuthService.waitForAuth.mockResolvedValue({ success: true });
     mockAuthService.hasValidToken.mockReturnValue(false);
-    mockAuthService.getToken.mockReturnValue(null);
+    mockAuthService.getTokenForServer.mockReturnValue(null);
     mockTestingService.testRemoteServer?.mockReturnValue(
       Promise.resolve({ success: false, requiresAuth: true })
     );
@@ -41,12 +40,11 @@ describe("AuthScreen", () => {
 
   it("revokes a token when confirmed after pressing R", async () => {
     mockAuthService.hasValidToken.mockReturnValue(true);
-    mockAuthService.getToken.mockReturnValue({
+    mockAuthService.getTokenForServer.mockReturnValue({
       accessToken: "token",
       refreshToken: "refresh",
       tokenType: "Bearer",
     });
-    mockAuthService.getAllStoredTokenServerIds.mockReturnValue([sampleRemoteServers[0].id]);
 
     const { stdin, lastFrame } = render(<AuthScreen onBack={() => {}} />);
     await waitForStateUpdate();
@@ -66,7 +64,7 @@ describe("AuthScreen", () => {
     mockConfigService.getRemoteServers.mockReturnValue([
       { ...sampleRemoteServers[0], oauth: { enabled: true } },
     ]);
-    mockAuthService.getToken.mockReturnValue(null);
+    mockAuthService.getTokenForServer.mockReturnValue(null);
     mockAuthService.startOAuthFlow.mockResolvedValue({ authUrl: "https://auth", state: "state" });
     mockAuthService.waitForAuth.mockResolvedValue({ success: true });
     mockTestingService.testRemoteServer.mockResolvedValue({
@@ -99,7 +97,7 @@ describe("AuthScreen", () => {
     mockConfigService.getRemoteServers.mockReturnValue([
       { ...sampleRemoteServers[0], oauth: { enabled: true } },
     ]);
-    mockAuthService.getToken.mockReturnValue({
+    mockAuthService.getTokenForServer.mockReturnValue({
       accessToken: "expired",
       refreshToken: "expired-refresh",
       tokenType: "Bearer",

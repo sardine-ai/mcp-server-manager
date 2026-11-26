@@ -65,15 +65,12 @@ export function AuthScreen({
     const allRemoteServers = configService.getRemoteServers();
     const states: ServerAuthState[] = [];
 
-    // Also get all server IDs that have stored OAuth tokens
-    const storedTokenServerIds = authService.getAllStoredTokenServerIds();
-
     // Collect all refresh promises to await before rendering
     const refreshPromises: Promise<void>[] = [];
 
     for (const server of allRemoteServers) {
-      const isExpired = authService.isTokenExpired(server.id);
-      const isRefreshable = authService.isRefreshable(server.id);
+      const isExpired = authService.isTokenExpired(server);
+      const isRefreshable = authService.isRefreshable(server);
 
       // Attempt refresh for expired-but-refreshable tokens
       if (isExpired && isRefreshable) {
@@ -89,9 +86,8 @@ export function AuthScreen({
     }
 
     for (const server of allRemoteServers) {
-      const token = authService.getToken(server.id);
-      const isExpired = authService.isTokenExpired(server.id);
-      const hasStoredToken = storedTokenServerIds.includes(server.id);
+      const token = authService.getTokenForServer(server);
+      const isExpired = authService.isTokenExpired(server);
       const isOAuthEnabled = server.oauth?.enabled || false;
       const isBearerOnly = !isOAuthEnabled;
 
@@ -106,7 +102,7 @@ export function AuthScreen({
         requiresAuth = testResult.requiresAuth || false;
       }
 
-      const shouldInclude = isOAuthEnabled || hasToken || hasStoredToken;
+      const shouldInclude = isOAuthEnabled || hasToken;
       if (!shouldInclude) {
         continue;
       }
@@ -119,12 +115,11 @@ export function AuthScreen({
       const status: AuthStatus = {
         serverId: server.id,
         serverName: server.name,
-        hasToken: hasToken || hasStoredToken,
-        isOAuth: isOAuthEnabled || hasStoredToken,
+        hasToken,
+        isOAuth: isOAuthEnabled || hasToken,
         isExpired,
         expiresAt: token?.expiresAt,
-        tokenPreview:
-          hasToken || hasStoredToken ? authService.getTokenPreview(server.id) || undefined : undefined,
+        tokenPreview: hasToken ? authService.getTokenPreview(server) || undefined : undefined,
         requiresAuth: needsAuth,
       };
 
@@ -247,8 +242,8 @@ export function AuthScreen({
                     hasToken: true,
                     requiresAuth: false,
                     isExpired: false,
-                    expiresAt: authResult.expiresAt ?? authService.getToken(server.id)?.expiresAt,
-                    tokenPreview: authService.getTokenPreview(server.id) || undefined,
+                    expiresAt: authResult.expiresAt ?? authService.getTokenForServer(server)?.expiresAt,
+                    tokenPreview: authService.getTokenPreview(server) || undefined,
                   },
                 }
               : s

@@ -8,7 +8,8 @@ const NOW = 1_700_000_000_000;
 
 interface FakeAuthHarness {
   authService: AuthService;
-  getToken: ReturnType<typeof vi.fn>;
+  getStoredToken: ReturnType<typeof vi.fn>;
+  getTokenForServer: ReturnType<typeof vi.fn>;
   saveTokensForServer: ReturnType<typeof vi.fn>;
   removeToken: ReturnType<typeof vi.fn>;
   refreshTokenWithMutex: ReturnType<typeof vi.fn>;
@@ -27,7 +28,16 @@ function createServer(overrides: Partial<RemoteServer> = {}): RemoteServer {
 
 function createAuthHarness(initialToken?: StoredOAuthTokens): FakeAuthHarness {
   let token = initialToken;
-  const getToken = vi.fn(() => token);
+  const getStoredToken = vi.fn(() => token);
+  const getTokenForServer = vi.fn((server: RemoteServer) => {
+    if (!token) {
+      return null;
+    }
+    if (token.resourceUrl && token.resourceUrl !== server.url) {
+      return null;
+    }
+    return token;
+  });
   const saveTokensForServer = vi.fn((_serverId: string, nextToken: StoredOAuthTokens) => {
     token = nextToken;
   });
@@ -38,12 +48,14 @@ function createAuthHarness(initialToken?: StoredOAuthTokens): FakeAuthHarness {
 
   return {
     authService: {
-      getToken,
+      getStoredToken,
+      getTokenForServer,
       saveTokensForServer,
       removeToken,
       refreshTokenWithMutex,
     } as unknown as AuthService,
-    getToken,
+    getStoredToken,
+    getTokenForServer,
     saveTokensForServer,
     removeToken,
     refreshTokenWithMutex,
@@ -130,6 +142,27 @@ describe("createTransportAuthProvider", () => {
     const provider = createTransportAuthProvider(createServer(), authService);
 
     await expect(provider.tokens()).resolves.toBeUndefined();
+  });
+
+  it("ignores tokens issued for a different server URL", async () => {
+    const harness = createAuthHarness({
+      accessToken: "old-access",
+      refreshToken: "old-refresh",
+      tokenType: "Bearer",
+      clientId: "old-client",
+      clientSecret: "old-secret",
+      resourceUrl: "https://original.test/mcp",
+    });
+    const provider = createTransportAuthProvider(
+      createServer({ url: "https://attacker.example/mcp" }),
+      harness.authService
+    );
+
+    await expect(provider.tokens()).resolves.toBeUndefined();
+    expect(harness.refreshTokenWithMutex).not.toHaveBeenCalled();
+    await expect(provider.clientInformation()).resolves.toEqual({
+      client_id: "https://attacker.example/mcp",
+    });
   });
 
   it("maps stored tokens to SDK OAuth tokens with remaining expiry seconds", async () => {
@@ -233,6 +266,7 @@ describe("createTransportAuthProvider", () => {
       expiresAt: NOW + 30_000,
       clientId: "client-id",
       clientSecret: "client-secret",
+      resourceUrl: "https://example.test/mcp",
     });
     expect(harness.currentToken()?.accessToken).toBe("new");
   });

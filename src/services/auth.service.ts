@@ -1016,7 +1016,8 @@ export class AuthService {
       };
 
       if (!this.saveTokens(server.id, newTokens, tokenBeforeRefresh)) {
-        return this.getStoredToken(server.id);
+        // The record changed underneath us, so re-check it against this server's URL
+        return this.getTokenForServer(server);
       }
 
       return newTokens;

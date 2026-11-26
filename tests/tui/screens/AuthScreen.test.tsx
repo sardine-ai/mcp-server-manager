@@ -85,6 +85,27 @@ describe("AuthScreen", () => {
     expect(onAuthComplete).toHaveBeenCalledWith(sampleRemoteServers[0].id, false);
   });
 
+  it("allows revoking a credential stored for another URL, which no longer authenticates", async () => {
+    mockConfigService.getRemoteServers.mockReturnValue([sampleRemoteServers[0]]);
+    mockAuthService.getTokenForServer.mockReturnValue(null);
+    mockAuthService.getStoredToken.mockReturnValue({
+      accessToken: "old",
+      refreshToken: "old-refresh",
+      tokenType: "Bearer",
+      resourceUrl: "https://previous.test/mcp",
+    });
+    const { stdin, lastFrame } = render(<AuthScreen onBack={() => {}} />);
+    await waitForStateUpdate();
+
+    stdin.write("r");
+    await waitForStateUpdate(200);
+    expect(lastFrame()).toContain("Revoke Token");
+
+    stdin.write("Y");
+    await waitForStateUpdate(300);
+    expect(mockAuthService.removeToken).toHaveBeenCalledWith(sampleRemoteServers[0].id);
+  });
+
   it("goes back on ESC", async () => {
     const onBack = vi.fn();
     const { stdin } = render(<AuthScreen onBack={onBack} />);

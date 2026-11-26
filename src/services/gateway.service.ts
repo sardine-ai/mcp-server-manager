@@ -157,6 +157,19 @@ const createGatewayState = (): GatewayState => ({
 
 let gatewayState: GatewayState = createGatewayState();
 
+/**
+ * Local servers whose transport exists but is still waiting for the MCP handshake. They are
+ * not in `connectedServers` yet, so shutdown has to close them from here or the child process
+ * outlives the gateway it was started for.
+ */
+const startupTransports = new Set<StdioClientTransport>();
+
+/**
+ * Bumped by stopGateway. A startup that is cancelled while it waits for connections compares
+ * this before publishing anything, so a stopped gateway cannot come back and bind the port.
+ */
+let gatewayGeneration = 0;
+
 let refreshLock: Promise<void> = Promise.resolve();
 
 /**
@@ -246,6 +259,7 @@ async function connectLocalServer(
 ): Promise<ConnectedServer | null> {
   const configService = getConfigService();
   const envService = getEnvironmentService();
+  let transport: StdioClientTransport | null = null;
 
   try {
     logger.info(`Connecting to local server: ${server.name}${cwd ? ` in ${cwd}` : ""}`);
@@ -267,7 +281,7 @@ async function connectLocalServer(
       ...(cwd && { PWD: cwd }),
     };
 
-    const transport = new StdioClientTransport({
+    transport = new StdioClientTransport({
       command: shellCommand, // e.g., "/bin/zsh" or "/bin/bash"
       // -l = login shell (loads full PATH). "mcpsm" is the placeholder for $0.
       args: [
@@ -285,6 +299,7 @@ async function connectLocalServer(
 
     const client = new Client({ name: "mcpsm-gateway", version: VERSION }, { capabilities: {} });
 
+    startupTransports.add(transport);
     await client.connect(transport);
 
     // Get available tools
@@ -311,7 +326,11 @@ async function connectLocalServer(
     };
   } catch (error) {
     logger.error(`Failed to connect to local server ${server.name}:`, error);
+    // The transport is not published, so nothing else would ever close its child process
+    await transport?.close().catch(() => undefined);
     return null;
+  } finally {
+    if (transport) startupTransports.delete(transport);
   }
 }
 
@@ -692,6 +711,7 @@ export async function startGateway(
 
   const configService = getConfigService();
   const port = configService.getPort();
+  const generation = gatewayGeneration;
 
   logger.info(`Starting MCP Gateway on port ${port}...`);
 
@@ -748,6 +768,14 @@ export async function startGateway(
 
     const results = await Promise.all(connectionPromises);
     const connectedServers = results.filter((r): r is ConnectedServer => r !== null);
+
+    // stopGateway closed the pending transports and moved on; publishing these would bind the
+    // port after the user already stopped the gateway
+    if (generation !== gatewayGeneration) {
+      await Promise.allSettled(connectedServers.map(closeServerConnection));
+      return { success: false, error: "Startup was cancelled" };
+    }
+
     const failedCount = results.length - connectedServers.length;
 
     if (failedCount > 0) {
@@ -934,8 +962,19 @@ export async function stopGateway(): Promise<{ success: boolean; error?: string 
   getAuthService().stopProactiveRefresh();
 
   try {
+    // Invalidate a startup that is still connecting, so it cannot publish after this stop
+    gatewayGeneration++;
+
+    // Servers still waiting for their handshake are not in connectedServers, so close them
+    // from the startup registry: their child processes would outlive the gateway otherwise
+    const pending = [...startupTransports];
+    startupTransports.clear();
+
     // Close all server connections with timeout to prevent hanging
-    const closePromises: Promise<unknown>[] = [closeAllProjectServers()];
+    const closePromises: Promise<unknown>[] = [
+      ...pending.map((transport) => transport.close().catch(() => undefined)),
+      closeAllProjectServers(),
+    ];
     for (const [, server] of gatewayState.connectedServers) {
       closePromises.push(closeServerConnection(server));
     }
@@ -1071,9 +1110,11 @@ export async function refreshGateway(
     }
 
     const localServers = configService.getLocalServers().filter((s) => serverIdsToStart.has(s.id));
+    // Same two spellings startGateway accepts: a remote named on the command is stored
+    // without the prefix, so requiring it here would drop it on the first refresh
     const remoteServers = configService
       .getRemoteServers()
-      .filter((s) => serverIdsToStart.has(`remote:${s.id}`));
+      .filter((s) => serverIdsToStart.has(s.id) || serverIdsToStart.has(`remote:${s.id}`));
 
     if (localServers.length === 0 && remoteServers.length === 0) {
       logger.warn("No servers selected/enabled during refresh; clearing connections");
@@ -1223,9 +1264,73 @@ export async function refreshGatewayTools(
 }
 
 /**
+ * The daemon must answer signals from the moment it is discoverable: node's default action for
+ * SIGHUP is to terminate, so a refresh that lands during startup would kill the gateway. Handlers
+ * are installed up front, and refreshes wait on `ready` until the gateway is listening.
+ */
+function registerForegroundSignals(): { ready: () => void } {
+  let markReady = (): void => {};
+  const ready = new Promise<void>((resolve) => {
+    markReady = resolve;
+  });
+
+  let shuttingDown = false;
+  const shutdown = async (): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log("\nShutting down...");
+    await stopGateway();
+    process.exit(0);
+  };
+
+  const handleError = (error: Error): void => {
+    console.error("Uncaught error:", error);
+    void shutdown();
+  };
+
+  const changeWhenReady = (
+    apply: () => Promise<{ success: boolean; error?: string }>,
+    describeFailure: string
+  ): void => {
+    void ready
+      .then(apply)
+      .then((result) => {
+        if (!result.success) {
+          logger.warn(`${describeFailure}: ${result.error}`);
+        }
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(`${describeFailure}: ${message}`);
+      });
+  };
+
+  process.on("SIGINT", () => void shutdown());
+  process.on("SIGTERM", () => void shutdown());
+  process.on("SIGHUP", () =>
+    changeWhenReady(() => refreshGateway("signal"), "Gateway refresh from signal failed")
+  );
+  process.on("SIGUSR1", () =>
+    changeWhenReady(() => refreshGatewayTools("signal"), "Gateway tool refresh from signal failed")
+  );
+  process.on("uncaughtException", handleError);
+  process.on("unhandledRejection", (reason) => {
+    handleError(reason instanceof Error ? reason : new Error(String(reason)));
+  });
+
+  return { ready: markReady };
+}
+
+/**
  * Run gateway in foreground mode (blocking)
  */
-export async function runGatewayForeground(selectedServerIds?: string[]): Promise<void> {
+export async function runGatewayForeground(
+  selectedServerIds?: string[],
+  options?: { onSignalsReady?: () => void }
+): Promise<void> {
+  const signals = registerForegroundSignals();
+  options?.onSignalsReady?.();
+
   const result = await startGateway(selectedServerIds);
 
   if (!result.success) {
@@ -1238,54 +1343,7 @@ export async function runGatewayForeground(selectedServerIds?: string[]): Promis
   console.log(`Serving ${gatewayState.aggregatedTools.length} tools`);
   console.log("Press Ctrl+C to stop");
 
-  // Handle shutdown signals
-  const shutdown = async (): Promise<void> => {
-    console.log("\nShutting down...");
-    await stopGateway();
-    process.exit(0);
-  };
-
-  // Handle uncaught errors to ensure cleanup
-  const handleError = async (error: Error): Promise<void> => {
-    console.error("Uncaught error:", error);
-    await shutdown();
-  };
-
-  const handleRefreshSignal = (): void => {
-    refreshGateway("signal")
-      .then((result) => {
-        if (!result.success) {
-          logger.warn(`Gateway refresh from signal failed: ${result.error}`);
-        }
-      })
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error(`Gateway refresh from signal crashed: ${message}`);
-      });
-  };
-
-  const handleToolRefreshSignal = (): void => {
-    refreshGatewayTools("signal")
-      .then((result) => {
-        if (!result.success) {
-          logger.warn(`Gateway tool refresh from signal failed: ${result.error}`);
-        }
-      })
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error(`Gateway tool refresh from signal crashed: ${message}`);
-      });
-  };
-
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
-  process.on("SIGHUP", handleRefreshSignal);
-  process.on("SIGUSR1", handleToolRefreshSignal);
-  process.on("uncaughtException", handleError);
-  process.on("unhandledRejection", (reason) => {
-    const error = reason instanceof Error ? reason : new Error(String(reason));
-    handleError(error);
-  });
+  signals.ready();
 
   // Keep process alive
   await new Promise(() => {});

@@ -7,6 +7,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import process from "node:process";
 
 const text = (value) => ({ content: [{ type: "text", text: value }] });
+// A test can learn whether the gateway restarted this process by watching the pid it wrote
+if (process.env.PID_FILE) fs.writeFileSync(process.env.PID_FILE, String(process.pid));
 const server = new McpServer({ name: "cwd-fixture", version: "1.0.0" });
 server.registerTool("cwd", { description: "Report the working directory" }, async () =>
   text(JSON.stringify({ cwd: process.cwd(), pid: process.pid }))

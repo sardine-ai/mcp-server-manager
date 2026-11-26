@@ -427,6 +427,27 @@ describe("AuthService unit coverage", () => {
     expect(refreshSpy).toHaveBeenCalled();
   });
 
+  it("does not hand back a credential another URL replaced mid-refresh", async () => {
+    const server = remoteServer();
+    const stored = token({ resourceUrl: "https://api.test/mcp" });
+    service.saveTokensForServer(server.id, stored);
+    const other = new AuthService(configDir);
+
+    vi.spyOn(service, "discoverAuthServer").mockResolvedValue({ metadata: AUTH_METADATA });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        other.saveTokensForServer(
+          server.id,
+          token({ accessToken: "foreign", resourceUrl: "https://other.test/mcp" })
+        );
+        return responseJson({ access_token: "stale", token_type: "Bearer" });
+      })
+    );
+
+    await expect(service.refreshToken(server, stored)).resolves.toBeNull();
+  });
+
   it("gets valid tokens directly or through refresh when close to expiry", async () => {
     const server = remoteServer();
 

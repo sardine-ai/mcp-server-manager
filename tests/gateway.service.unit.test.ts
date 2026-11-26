@@ -14,10 +14,11 @@ const sdkMocks = vi.hoisted(() => {
   const serverInstances: any[] = [];
   const serverTransports: any[] = [];
   const listToolsResults: any[] = [];
+  const connectHandlers: ((transport: unknown) => unknown)[] = [];
 
   const Client = vi.fn(function () {
     const instance = {
-      connect: vi.fn(),
+      connect: vi.fn((transport: unknown) => connectHandlers.shift()?.(transport)),
       listTools: vi.fn().mockResolvedValue(listToolsResults.shift() ?? { tools: [] }),
       callTool: vi.fn(),
     };
@@ -98,6 +99,7 @@ const sdkMocks = vi.hoisted(() => {
     serverInstances,
     serverTransports,
     listToolsResults,
+    connectHandlers,
   };
 });
 
@@ -176,6 +178,7 @@ vi.mock("../src/services/oauth-transport.provider.js", () => ({
 
 import {
   getGatewayStatus,
+  refreshGateway,
   refreshGatewayTools,
   resetGatewayStateForTests,
   setGatewayStateForTests,
@@ -296,6 +299,7 @@ describe("GatewayService unit coverage", () => {
     sdkMocks.serverInstances.length = 0;
     sdkMocks.serverTransports.length = 0;
     sdkMocks.listToolsResults.length = 0;
+    sdkMocks.connectHandlers.length = 0;
     serviceMocks.configService.reload.mockImplementation(() => undefined);
     serviceMocks.authService.reload.mockImplementation(() => undefined);
     serviceMocks.authService.stopProactiveRefresh.mockImplementation(() => undefined);
@@ -522,6 +526,31 @@ describe("GatewayService unit coverage", () => {
     } finally {
       await new Promise<void>((resolve) => blocker.close(() => resolve()));
     }
+  });
+
+  it("keeps a remote named on the command line when the gateway refreshes", async () => {
+    const port = await getFreePort();
+    const remote = remoteServer();
+    serviceMocks.configService.getPort.mockReturnValue(port);
+    serviceMocks.configService.getSelectionState.mockReturnValue({ local: [], remote: [] });
+    serviceMocks.configService.getLocalServers.mockReturnValue([]);
+    serviceMocks.configService.getRemoteServers.mockReturnValue([remote]);
+    serviceMocks.configService.getToolFilters.mockReturnValue({});
+    serviceMocks.profileService.list.mockReturnValue([]);
+    serviceMocks.profileService.getProfile.mockReturnValue(undefined);
+    sdkMocks.listToolsResults.push(
+      { tools: [{ name: "search" }] },
+      { tools: [{ name: "search" }] }
+    );
+
+    // A remote named on the command line, not as `remote:<id>`, as the CLI and profiles allow
+    await expect(startGateway([remote.id])).resolves.toEqual({ success: true });
+    expect(getGatewayStatus().serverCount).toBe(1);
+
+    await expect(refreshGateway("test")).resolves.toEqual({ success: true });
+
+    expect(getGatewayStatus().serverCount).toBe(1);
+    expect(sdkMocks.httpTransports).toHaveLength(2);
   });
 
   it("refreshes connected server tools and notifies active sessions", async () => {

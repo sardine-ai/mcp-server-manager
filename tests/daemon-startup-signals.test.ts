@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "fs";
 import net from "net";
+import os from "os";
+import path from "path";
 
 const serviceMocks = vi.hoisted(() => ({
   configService: {
@@ -148,4 +151,57 @@ describe("foreground gateway signals", () => {
     await vi.waitFor(() => expect(serviceMocks.configService.reload).toHaveBeenCalledTimes(1));
     expect(exitSpy).not.toHaveBeenCalled();
   });
+
+  // The gateway starts local servers through a POSIX login shell
+  it.skipIf(process.platform === "win32")(
+    "applies a tool filter sent during startup without restarting the servers",
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcpsm-sigusr1-"));
+      const pidFile = path.join(dir, "server.pid");
+      const fixture = path.resolve("tests/fixtures/cwd-server.mjs");
+
+      try {
+        serviceMocks.configService.getPort.mockReturnValue(await freePort());
+        serviceMocks.configService.getSelectionState.mockReturnValue({
+          local: ["cwd"],
+          remote: [],
+        });
+        serviceMocks.configService.getLocalServers.mockReturnValue([
+          {
+            id: "cwd",
+            name: "cwd",
+            command: process.execPath,
+            args: [fixture],
+            env: { PID_FILE: pidFile },
+          },
+        ]);
+        serviceMocks.configService.getToolFilters.mockReturnValue({});
+
+        void runGatewayForeground();
+
+        // Sent while the servers are still connecting: it has to wait for the gateway
+        handlers.get("SIGUSR1")?.();
+        expect(exitSpy).not.toHaveBeenCalled();
+
+        await waitForStartupToFinish();
+        // The queued refresh runs once the gateway is up: refreshGatewayTools reloads the
+        // config only when it gets that far, so a reload proves it was not dropped
+        await vi.waitFor(() => expect(serviceMocks.configService.reload).toHaveBeenCalled());
+        expect(getGatewayStatus().toolCount).toBe(2);
+        const pid = fs.readFileSync(pidFile, "utf8");
+
+        // Disabling a tool now must reach the running servers, not need a restart
+        serviceMocks.configService.getToolFilters.mockReturnValue({
+          cwd: { disabledTools: ["shared_only"] },
+        });
+        handlers.get("SIGUSR1")?.();
+
+        await vi.waitFor(() => expect(getGatewayStatus().toolCount).toBe(1));
+        expect(fs.readFileSync(pidFile, "utf8")).toBe(pid);
+        expect(exitSpy).not.toHaveBeenCalled();
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  );
 });

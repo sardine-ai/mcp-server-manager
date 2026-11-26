@@ -33,7 +33,7 @@ function mergeAndSaveTokens(
   server: RemoteServer,
   oauthTokens: OAuthTokens
 ): StoredOAuthTokens {
-  const existing = authService.getToken(server.id) || undefined;
+  const existing = authService.getTokenForServer(server) || undefined;
 
   const merged: StoredOAuthTokens = {
     accessToken: oauthTokens.access_token,
@@ -45,6 +45,7 @@ function mergeAndSaveTokens(
       : existing?.expiresAt,
     clientId: existing?.clientId ?? server.oauth?.clientId,
     clientSecret: existing?.clientSecret ?? server.oauth?.clientSecret,
+    resourceUrl: server.url,
   };
 
   authService.saveTokensForServer(server.id, merged);
@@ -59,7 +60,7 @@ export function createTransportAuthProvider(
   let cachedCodeVerifier: string | null = null;
 
   const ensureFreshTokens = async (): Promise<StoredOAuthTokens | undefined> => {
-    const stored = authService.getToken(server.id) || undefined;
+    const stored = authService.getTokenForServer(server) || undefined;
     if (!stored) {
       return undefined;
     }
@@ -104,7 +105,7 @@ export function createTransportAuthProvider(
       scope: server.oauth?.scopes?.join(" "),
     },
     async clientInformation(): Promise<OAuthClientInformationMixed | undefined> {
-      const stored = authService.getToken(server.id);
+      const stored = authService.getTokenForServer(server);
       const clientId = server.oauth?.clientId || stored?.clientId;
       const clientSecret = server.oauth?.clientSecret || stored?.clientSecret;
 
@@ -146,7 +147,7 @@ export function createTransportAuthProvider(
     async invalidateCredentials(scope: "all" | "client" | "tokens" | "verifier"): Promise<void> {
       if (scope === "all" || scope === "tokens") {
         // Preserve the refresh token so the next tokens() call can attempt a refresh
-        const stored = authService.getToken(server.id);
+        const stored = authService.getStoredToken(server.id);
         if (stored?.refreshToken) {
           log.debug(`Invalidating access token for ${server.name} but preserving refresh token`);
           authService.saveTokensForServer(server.id, {
@@ -159,7 +160,7 @@ export function createTransportAuthProvider(
         }
       }
       if (scope === "all" || scope === "client") {
-        const stored = authService.getToken(server.id);
+        const stored = authService.getStoredToken(server.id);
         if (stored) {
           const { clientId: _clientId, clientSecret: _clientSecret, ...rest } = stored;
           authService.saveTokensForServer(server.id, rest);

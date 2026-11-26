@@ -191,15 +191,19 @@ describe("gateway HTTP endpoint", () => {
   itLocal("passes the folder a client starts `mcpsm bridge` in, and its tool changes", async () => {
     const project = fs.mkdtempSync(path.join(os.tmpdir(), "mcpsm-bridge-"));
     fs.writeFileSync(path.join(project, ".fixture-project"), "");
+    // The bridge reads the gateway address from its own config; the target only names a profile
+    const configDir = path.join(project, ".mcpsm");
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(configDir, "config.json"),
+      JSON.stringify({ servers: [], remoteServers: [], port: mocks.config.getPort() })
+    );
     const tsx = pathToFileURL(path.resolve("node_modules/tsx/dist/loader.mjs")).href;
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: ["--import", tsx, path.resolve("src/cli/index.ts"), "bridge", url],
       cwd: project,
-      env: { ...process.env, MCP_MANAGER_CONFIG_DIR: path.join(project, ".mcpsm") } as Record<
-        string,
-        string
-      >,
+      env: { ...process.env, MCP_MANAGER_CONFIG_DIR: configDir } as Record<string, string>,
     });
     const client = new Client({ name: "bridge-test", version: "1.0.0" });
     const changed = new Promise<void>((resolve) =>

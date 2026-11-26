@@ -38,6 +38,35 @@ export interface DaemonStatus {
   health?: DaemonHealthResponse;
 }
 
+/**
+ * A process owns the gateway port only if it is the gateway itself. Any other app that
+ * happens to listen on that port must never be adopted, signalled or killed.
+ */
+export function commandRunsMcpsmDaemon(command: string): boolean {
+  return /(^|\s)daemon\s+start\s+--foreground(\s|$)/.test(command.replace(/\\/g, "/"));
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Command line of a process, or null when `ps` cannot answer (missing tool, dead PID) */
+function readProcessCommand(pid: number): string | null {
+  try {
+    return execSync(`ps -ww -o command= -p ${pid}`, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
 /** Daemon service class */
 export class DaemonService {
   private configDir: string;
@@ -126,37 +155,57 @@ export class DaemonService {
     }
   }
 
+  /** Whether a PID is the gateway daemon rather than another app that took its port */
+  private isDaemonPid(pid: number): boolean {
+    const command = readProcessCommand(pid);
+    return command !== null && commandRunsMcpsmDaemon(command);
+  }
+
+  /** Record this process as the daemon: the file, not the port, is what stop and status trust */
+  claimPidFile(): void {
+    fs.writeFileSync(this.pidFile, String(process.pid));
+  }
+
+  /** Delete the PID file, but only while it still names the given process */
+  clearPidFile(pid: number): void {
+    try {
+      if (this.readPidFile() !== pid) return;
+      fs.unlinkSync(this.pidFile);
+    } catch (error) {
+      log.debug("Failed to remove PID file:", error);
+    }
+  }
+
+  private readPidFile(): number | null {
+    try {
+      const pid = Number.parseInt(fs.readFileSync(this.pidFile, "utf8").trim(), 10);
+      return pid > 0 ? pid : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Check if daemon is running */
   isDaemonRunning(port = getConfigService().getPort()): DaemonStatus {
-    // Primary check: Is there a process listening on the daemon port?
-    const portPids = this.findProcessesByPort(port);
-    if (portPids.length === 0) {
-      // No process on port = daemon not running
-      // Clean up stale PID file if it exists
-      if (fs.existsSync(this.pidFile)) {
-        try {
-          fs.unlinkSync(this.pidFile);
-          log.debug("Cleaned up stale PID file (no process on port)");
-        } catch (error) {
-          log.debug("Failed to remove stale PID file:", error);
-        }
-      }
+    // The daemon records its own PID, so that file is the identity. The port scan only
+    // recovers a daemon started before this file existed, or with another config dir.
+    const recorded = this.readPidFile();
+    if (recorded !== null && this.isDaemonPid(recorded)) {
+      return { running: true, pid: recorded };
+    }
+    if (recorded !== null) {
+      log.debug(`PID file was stale (PID ${recorded} is not the daemon)`);
+      this.clearPidFile(recorded);
+    }
+
+    const recovered = this.findProcessesByPort(port).find((pid) => this.isDaemonPid(pid));
+    if (recovered === undefined) {
+      log.debug(`No mcpsm daemon found for port ${port}`);
       return { running: false };
     }
 
-    // Found process(es) on the port
-    const pid = portPids[0];
-    log.debug(`Found process on port ${port}: PID ${pid}`);
-
-    // Update PID file to reflect the actual running process
-    // (This handles cases where daemon was started externally or PID file is stale)
-    try {
-      fs.writeFileSync(this.pidFile, pid.toString());
-    } catch (error) {
-      log.debug("Failed to update PID file:", error);
-    }
-
-    return { running: true, pid };
+    log.debug(`Found daemon on port ${port}: PID ${recovered}`);
+    return { running: true, pid: recovered };
   }
 
   /** Check if any process is using the daemon port */
@@ -275,39 +324,72 @@ export class DaemonService {
 
     child.unref();
 
-    // Save PID
+    // The daemon records its own PID once it starts; this process only spawned it
     if (child.pid) {
-      fs.writeFileSync(this.pidFile, child.pid.toString());
       return { success: true, pid: child.pid };
     }
 
     return { success: false, error: "Failed to start daemon process" };
   }
 
+  /**
+   * PIDs to stop: the PID the daemon wrote is the identity, and the port scan only covers a
+   * daemon that never recorded one. A PID that is alive but unverifiable is left alone.
+   */
+  private daemonPidsToStop(port: number): { pids: number[]; error?: string } {
+    const recorded = this.readPidFile();
+    if (recorded === null) {
+      return { pids: this.findDaemonsByPort(port) };
+    }
+
+    if (!isProcessAlive(recorded)) {
+      this.clearPidFile(recorded);
+      return { pids: [] };
+    }
+
+    const command = readProcessCommand(recorded);
+    if (command === null) {
+      return {
+        pids: [],
+        error: `Cannot verify PID ${recorded} from the daemon PID file; not stopping it`,
+      };
+    }
+    if (!commandRunsMcpsmDaemon(command)) {
+      log.warn(`Leaving PID ${recorded} alone: it is not the mcpsm daemon`);
+      this.clearPidFile(recorded);
+      return { pids: [] };
+    }
+
+    return { pids: [recorded] };
+  }
+
+  private findDaemonsByPort(port: number): number[] {
+    const daemons: number[] = [];
+    for (const pid of this.findProcessesByPort(port)) {
+      if (this.isDaemonPid(pid)) {
+        daemons.push(pid);
+      } else {
+        log.warn(`Leaving PID ${pid} alone: it is not the mcpsm daemon`);
+      }
+    }
+    return daemons;
+  }
+
   /** Stop daemon */
   async stopDaemon(): Promise<Result> {
     const configService = getConfigService();
     const port = configService.getPort();
-    const pidsToKill = new Set<number>();
 
     // Unload the auto-start service first so it doesn't respawn what we kill below
     this.runServiceManager("stop");
 
-    // Only stop processes that are bound to the daemon port
-    const portPids = this.findProcessesByPort(port);
-    for (const pid of portPids) {
-      pidsToKill.add(pid);
+    const { pids, error } = this.daemonPidsToStop(port);
+    if (error) {
+      return { success: false, error };
     }
+    const pidsToKill = new Set(pids);
 
     if (pidsToKill.size === 0) {
-      // Clean up PID file if it exists but no processes found
-      if (fs.existsSync(this.pidFile)) {
-        try {
-          fs.unlinkSync(this.pidFile);
-        } catch (error) {
-          log.debug("Failed to remove PID file:", error);
-        }
-      }
       return { success: true };
     }
 
@@ -324,13 +406,8 @@ export class DaemonService {
       }
     }
 
-    // Clean up PID file
-    if (fs.existsSync(this.pidFile)) {
-      try {
-        fs.unlinkSync(this.pidFile);
-      } catch (error) {
-        log.debug("Failed to remove PID file:", error);
-      }
+    for (const pid of pidsToKill) {
+      this.clearPidFile(pid);
     }
 
     // Wait a bit more to ensure port is released

@@ -28,11 +28,11 @@ export function registerAuthCommands(program: Command): void {
       const statuses: AuthStatus[] = [];
 
       for (const server of remoteServers) {
-        let hasToken = authService.hasValidToken(server.id);
-        let isExpired = authService.isTokenExpired(server.id);
+        let hasToken = authService.hasValidToken(server);
+        let isExpired = authService.isTokenExpired(server);
 
         // Attempt refresh for expired-but-refreshable tokens before displaying status
-        if (isExpired && authService.isRefreshable(server.id)) {
+        if (isExpired && authService.isRefreshable(server)) {
           const refreshed = await authService.ensureValidToken(server);
           if (refreshed) {
             hasToken = true;
@@ -40,7 +40,7 @@ export function registerAuthCommands(program: Command): void {
           }
         }
 
-        const token = authService.getToken(server.id);
+        const token = authService.getTokenForServer(server);
 
         statuses.push({
           serverId: server.id,
@@ -49,7 +49,7 @@ export function registerAuthCommands(program: Command): void {
           isOAuth: server.oauth?.enabled || false,
           isExpired,
           expiresAt: token?.expiresAt,
-          tokenPreview: hasToken ? authService.getTokenPreview(server.id) || undefined : undefined,
+          tokenPreview: hasToken ? authService.getTokenPreview(server) || undefined : undefined,
           requiresAuth: server.oauth?.enabled && !hasToken,
         });
       }
@@ -128,7 +128,7 @@ export function registerAuthCommands(program: Command): void {
       }
 
       // Check if already authenticated (attempt refresh if expired)
-      if (authService.hasValidToken(server.id)) {
+      if (authService.hasValidToken(server)) {
         console.log(`${c.checkmark} Already authenticated with ${server.name}`);
         console.log(
           `${colors.gray}Use 'mcpsm auth logout ${server.id}' to remove the token.${colors.reset}`
@@ -137,7 +137,7 @@ export function registerAuthCommands(program: Command): void {
       }
 
       // Try refreshing before starting a full OAuth flow
-      if (authService.isRefreshable(server.id)) {
+      if (authService.isRefreshable(server)) {
         console.log(`${colors.gray}Token expired, attempting refresh...${colors.reset}`);
         const refreshed = await authService.ensureValidToken(server);
         if (refreshed) {
@@ -227,7 +227,9 @@ export function registerAuthCommands(program: Command): void {
 
       const server = serverResult.server as RemoteServer;
 
-      if (!authService.hasValidToken(server.id)) {
+      // Any stored credential counts, even an expired access token: the refresh token
+      // and client secret must still be removable.
+      if (!authService.getStoredToken(server.id)) {
         console.log(`${colors.gray}No token stored for ${server.name}${colors.reset}`);
         return;
       }
@@ -281,7 +283,7 @@ export function registerAuthCommands(program: Command): void {
 
       for (const server of remoteServers) {
         // Check if already authenticated
-        if (authService.hasValidToken(server.id)) {
+        if (authService.hasValidToken(server)) {
           console.log(`${c.checkmark} ${server.name}: already authenticated`);
           skipped++;
           continue;
@@ -360,7 +362,7 @@ export function registerAuthCommands(program: Command): void {
       }
 
       const server = serverResult.server as RemoteServer;
-      const token = authService.getToken(server.id);
+      const token = authService.getStoredToken(server.id);
 
       if (!token) {
         console.log(`${c.cross} No token stored for ${server.name}`);

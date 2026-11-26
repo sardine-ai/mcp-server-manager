@@ -823,7 +823,9 @@ describe("TestingService unit coverage", () => {
       remoteServer({ id: "auth-failed", oauth: { enabled: true } }),
     ];
     configMocks.remoteServers = servers;
-    authMocks.service.hasValidToken.mockImplementation((serverId: string) => serverId === "valid");
+    authMocks.service.hasValidToken.mockImplementation(
+      (server: { id: string }) => server.id === "valid"
+    );
     authMocks.service.startOAuthFlow.mockImplementation((server: RemoteServer) =>
       server.id === "no-flow"
         ? null

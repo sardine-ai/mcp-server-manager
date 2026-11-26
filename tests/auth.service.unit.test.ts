@@ -361,14 +361,13 @@ describe("AuthService unit coverage", () => {
     );
     service.saveTokensForServer("valid", token({ accessToken: "long-access-token" }));
 
-    expect(service.getAllStoredTokenServerIds().sort()).toEqual(["expired", "short", "valid"]);
-    expect(service.getTokenPreview("short")).toBe("****");
-    expect(service.getTokenPreview("valid")).toBe("long...oken");
-    expect(service.getTokenPreview("missing")).toBeNull();
-    expect(service.hasValidToken("valid")).toBe(true);
-    expect(service.hasValidToken("expired")).toBe(false);
-    expect(service.isTokenExpired("expired")).toBe(true);
-    expect(service.isRefreshable("expired")).toBe(true);
+    expect(service.getTokenPreview(remoteServer({ id: "short" }))).toBe("****");
+    expect(service.getTokenPreview(remoteServer({ id: "valid" }))).toBe("long...oken");
+    expect(service.getTokenPreview(remoteServer({ id: "missing" }))).toBeNull();
+    expect(service.hasValidToken(remoteServer({ id: "valid" }))).toBe(true);
+    expect(service.hasValidToken(remoteServer({ id: "expired" }))).toBe(false);
+    expect(service.isTokenExpired(remoteServer({ id: "expired" }))).toBe(true);
+    expect(service.isRefreshable(remoteServer({ id: "expired" }))).toBe(true);
     expect(service.serverRequiresOAuth(remoteServer({ oauth: { enabled: true } }))).toBe(true);
 
     const internals = service as unknown as AuthServiceInternals;
@@ -384,9 +383,8 @@ describe("AuthService unit coverage", () => {
     expect(service.getPendingAuthServers()).toEqual([]);
 
     service.removeToken("short");
-    expect(service.getToken("short")).toBeNull();
+    expect(service.getStoredToken("short")).toBeNull();
     service.clearAllTokens();
-    expect(service.getAllStoredTokenServerIds()).toEqual([]);
   });
 
   it("gets valid tokens directly or through refresh when close to expiry", async () => {
@@ -593,7 +591,7 @@ describe("AuthService unit coverage", () => {
     await expect(requestText(`${redirectUri}?code=code&state=state`)).resolves.toMatchObject({
       status: 200,
     });
-    expect(service.getToken("remote")).toMatchObject({
+    expect(service.getStoredToken("remote")).toMatchObject({
       accessToken: "callback-access",
       refreshToken: "callback-refresh",
       scopes: ["tools.read", "tools.write"],

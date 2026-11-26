@@ -68,10 +68,16 @@ describe("AuthService", () => {
     });
 
     const reloaded = new AuthService(configDir);
-    expect(reloaded.hasValidToken("srv")).toBe(true);
-    expect(reloaded.getTokenPreview("srv")).toBe("toke...alue");
-    expect(reloaded.getToken("srv")?.refreshToken).toBe("refresh-token");
-    expect(reloaded.isTokenExpired("srv")).toBe(false);
+    const server: RemoteServer = {
+      id: "srv",
+      name: "Srv",
+      type: "http",
+      url: "https://srv.test/mcp",
+    };
+    expect(reloaded.hasValidToken(server)).toBe(true);
+    expect(reloaded.getTokenPreview(server)).toBe("toke...alue");
+    expect(reloaded.getStoredToken("srv")?.refreshToken).toBe("refresh-token");
+    expect(reloaded.isTokenExpired(server)).toBe(false);
   });
 
   it.each(["login", "revoke"])(
@@ -95,11 +101,11 @@ describe("AuthService", () => {
       if (action === "login") service.saveTokensForServer("datadog", fresh);
 
       daemon.saveTokensForServer("workos", fresh);
-      expect(new AuthService(configDir).getToken("datadog")).toEqual(
+      expect(new AuthService(configDir).getStoredToken("datadog")).toEqual(
         action === "login" ? fresh : null
       );
-      expect(daemon.getToken("datadog")).toEqual(action === "login" ? fresh : null);
-      expect(service.getToken("workos")).toEqual(fresh);
+      expect(daemon.getStoredToken("datadog")).toEqual(action === "login" ? fresh : null);
+      expect(service.getStoredToken("workos")).toEqual(fresh);
     }
   );
 
@@ -136,7 +142,7 @@ describe("AuthService", () => {
       );
 
       expect(await service.refreshToken(server, stored)).toEqual(action === "login" ? fresh : null);
-      expect(new AuthService(configDir).getToken(server.id)).toEqual(
+      expect(new AuthService(configDir).getStoredToken(server.id)).toEqual(
         action === "login" ? fresh : null
       );
     }
@@ -227,7 +233,7 @@ describe("AuthService", () => {
       const paths = migrated.getStoragePaths();
 
       expect(paths.tokensPath).toBe(path.join(mainConfigDir, "oauth-tokens.json"));
-      expect(migrated.getToken("srv")?.accessToken).toBe("legacy-token");
+      expect(migrated.getStoredToken("srv")?.accessToken).toBe("legacy-token");
       expect(JSON.parse(fs.readFileSync(paths.tokensPath, "utf8"))).toEqual(legacyTokens);
       expect(fileMode(paths.tokensPath)).toBe(0o600);
       expect(fileMode(legacyConfigDir)).toBe(0o700);
@@ -267,7 +273,7 @@ describe("AuthService", () => {
       const paths = migrated.getStoragePaths();
 
       expect(paths.tokensPath).toBe(path.join(mainConfigDir, "oauth-tokens.json"));
-      expect(migrated.getToken("srv")?.accessToken).toBe("default-legacy-token");
+      expect(migrated.getStoredToken("srv")?.accessToken).toBe("default-legacy-token");
       expect(fileMode(mainConfigDir)).toBe(0o700);
       expect(fileMode(paths.tokensPath)).toBe(0o600);
       expect(fileMode(legacyConfigDir)).toBe(0o700);
@@ -321,7 +327,7 @@ describe("AuthService", () => {
 
     expect(refreshed?.accessToken).toBe("new-token");
     expect(refreshed?.refreshToken).toBe("new-refresh");
-    expect(service.getToken(server.id)?.accessToken).toBe("new-token");
+    expect(service.getStoredToken(server.id)?.accessToken).toBe("new-token");
     expect(vi.mocked(fetch)).toHaveBeenCalled();
   });
 });

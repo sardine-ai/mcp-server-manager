@@ -69,6 +69,19 @@ const MCP_CLIENT_INFO = {
 const PROACTIVE_REFRESH_MARGIN_MS = 10 * 60 * 1000; // 10 minutes before expiry
 const PROACTIVE_RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 240_000, 480_000]; // exponential backoff
 
+/** Compare server URLs, treating a trailing slash as insignificant */
+function sameResourceUrl(a: string, b: string): boolean {
+  const normalize = (value: string): string => {
+    try {
+      const url = new URL(value);
+      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+    } catch {
+      return value.trim().replace(/\/+$/, "");
+    }
+  };
+  return normalize(a) === normalize(b);
+}
+
 export class AuthService {
   private configDir: string;
   private legacyConfigDirs: string[];
@@ -657,6 +670,7 @@ export class AuthService {
         scopes: tokenResponse.scope?.split(" "),
         clientId: pendingAuth.clientId,
         clientSecret: pendingAuth.clientSecret,
+        resourceUrl: pendingAuth.serverUrl,
         expiresAt: tokenResponse.expires_in
           ? Date.now() + tokenResponse.expires_in * 1000
           : undefined,
@@ -819,7 +833,7 @@ export class AuthService {
 
       const serverId = initialPendingAuth.serverId;
       // Track the token state before auth started
-      const tokenBeforeAuth = this.getToken(serverId)?.accessToken;
+      const tokenBeforeAuth = this.getStoredToken(serverId)?.accessToken;
 
       const checkAuth = (): void => {
         // Check if auth is still pending
@@ -828,7 +842,7 @@ export class AuthService {
         if (!pendingAuth) {
           // Auth completed (either success or failure)
           // Check if we have a NEW token for this specific server
-          const currentToken = this.getToken(serverId);
+          const currentToken = this.getStoredToken(serverId);
           if (currentToken?.accessToken && currentToken.accessToken !== tokenBeforeAuth) {
             // New token was added - success
             resolve({
@@ -862,10 +876,32 @@ export class AuthService {
 
   // === Token Management ===
 
-  /** Get stored token for a server */
-  getToken(serverId: string): StoredOAuthTokens | null {
+  /** Get the stored record for a server id, whatever URL it was issued for */
+  getStoredToken(serverId: string): StoredOAuthTokens | null {
     this.loadTokens();
     return this.tokens.get(serverId) || null;
+  }
+
+  /**
+   * Get the stored token for a server only when it was issued for that server's URL.
+   * Tokens are keyed by id and ids are derived from the display name, so without this
+   * check a re-added, renamed or imported server inherits the previous credentials.
+   */
+  getTokenForServer(server: RemoteServer): StoredOAuthTokens | null {
+    const stored = this.getStoredToken(server.id);
+    if (!stored) {
+      return null;
+    }
+
+    // Tokens saved before the binding existed are accepted and bound on their next save
+    if (stored.resourceUrl && !sameResourceUrl(stored.resourceUrl, server.url)) {
+      log.warn(
+        `Ignoring OAuth credentials for ${server.id}: issued for ${stored.resourceUrl}, server is now ${server.url}`
+      );
+      return null;
+    }
+
+    return stored;
   }
 
   /** Save/overwrite stored tokens for a server */
@@ -877,7 +913,7 @@ export class AuthService {
 
   /** Get valid access token for a server (refreshes if needed) */
   async getValidToken(server: RemoteServer): Promise<string | null> {
-    const stored = this.getToken(server.id);
+    const stored = this.getTokenForServer(server);
     if (!stored) {
       return null;
     }
@@ -907,7 +943,14 @@ export class AuthService {
       return null;
     }
 
-    const tokenBeforeRefresh = this.getToken(server.id);
+    if (stored.resourceUrl && !sameResourceUrl(stored.resourceUrl, server.url)) {
+      log.warn(
+        `Refusing to refresh ${server.id}: stored credentials were issued for ${stored.resourceUrl}`
+      );
+      return null;
+    }
+
+    const tokenBeforeRefresh = this.getStoredToken(server.id);
     if (!tokenBeforeRefresh) {
       log.debug(
         `Skipping OAuth refresh for ${server.id} (pid=${process.pid}); no saved credentials`
@@ -972,13 +1015,14 @@ export class AuthService {
         scopes: tokenResponse.scope?.split(" ") || stored.scopes,
         clientId,
         clientSecret,
+        resourceUrl: stored.resourceUrl ?? server.url,
         expiresAt: tokenResponse.expires_in
           ? Date.now() + tokenResponse.expires_in * 1000
           : undefined,
       };
 
       if (!this.saveTokens(server.id, newTokens, tokenBeforeRefresh)) {
-        return this.getToken(server.id);
+        return this.getStoredToken(server.id);
       }
 
       return newTokens;
@@ -1015,7 +1059,7 @@ export class AuthService {
    * Returns true if the server has a valid (or freshly refreshed) token.
    */
   async ensureValidToken(server: RemoteServer): Promise<boolean> {
-    const stored = this.getToken(server.id);
+    const stored = this.getTokenForServer(server);
     if (!stored) {
       return false;
     }
@@ -1076,7 +1120,7 @@ export class AuthService {
     }
     this.refreshRetryCounts.delete(server.id);
 
-    const stored = this.getToken(server.id);
+    const stored = this.getTokenForServer(server);
     if (!stored?.refreshToken || !stored.expiresAt) {
       return;
     }
@@ -1108,7 +1152,7 @@ export class AuthService {
     server: RemoteServer,
     onRefreshed?: (serverId: string) => void
   ): Promise<void> {
-    const stored = this.getToken(server.id);
+    const stored = this.getTokenForServer(server);
     if (!stored?.refreshToken) {
       log.debug(`No refresh token for ${server.name}, skipping proactive refresh`);
       return;
@@ -1162,8 +1206,8 @@ export class AuthService {
   }
 
   /** Check if a server has valid OAuth tokens */
-  hasValidToken(serverId: string): boolean {
-    const stored = this.getToken(serverId);
+  hasValidToken(server: RemoteServer): boolean {
+    const stored = this.getTokenForServer(server);
     if (!stored) {
       return false;
     }
@@ -1188,15 +1232,9 @@ export class AuthService {
     writePrivateJsonFile(this.tokensPath, {});
   }
 
-  /** Get all server IDs that have stored OAuth tokens */
-  getAllStoredTokenServerIds(): string[] {
-    this.loadTokens();
-    return Array.from(this.tokens.keys());
-  }
-
   /** Get token preview (masked) */
-  getTokenPreview(serverId: string): string | null {
-    const stored = this.getToken(serverId);
+  getTokenPreview(server: RemoteServer): string | null {
+    const stored = this.getTokenForServer(server);
     if (!stored) {
       return null;
     }
@@ -1210,8 +1248,8 @@ export class AuthService {
   }
 
   /** Check if token is expired */
-  isTokenExpired(serverId: string): boolean {
-    const stored = this.getToken(serverId);
+  isTokenExpired(server: RemoteServer): boolean {
+    const stored = this.getTokenForServer(server);
     if (!stored || !stored.expiresAt) {
       return false;
     }
@@ -1220,13 +1258,13 @@ export class AuthService {
   }
 
   /** Check if token is expired but can be refreshed */
-  isRefreshable(serverId: string): boolean {
-    const stored = this.getToken(serverId);
+  isRefreshable(server: RemoteServer): boolean {
+    const stored = this.getTokenForServer(server);
     if (!stored) {
       return false;
     }
 
-    if (this.isTokenExpired(serverId) && stored.refreshToken) {
+    if (this.isTokenExpired(server) && stored.refreshToken) {
       return true;
     }
 

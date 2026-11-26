@@ -288,8 +288,8 @@ Keep the daemon running so clients can reach all your servers through the gatewa
 Stdio bridge that clients start; you do not run it yourself. It forwards MCP messages to the gateway and passes the folder it was started in, so local servers run in the client's project. See [Project Folders](/guide/architecture#project-folders).
 
 ```bash
-mcpsm bridge <url> [--cwd <dir>]
+mcpsm bridge [target] [--cwd <dir>]
 ```
 
-- `<url>` - Gateway endpoint, such as `http://localhost:8850/mcp` or `http://localhost:8850/mcp/<profile>`
+- `[target]` - Gateway path naming the profile to serve, such as `http://localhost:8850/mcp/<profile>`. Only the profile is used: the host and port always come from the port setting, so nothing written in a client config can send this traffic to another host, and changing the port does not need the clients rewritten.
 - `--cwd <dir>` - Project folder, for clients that do not start servers in it (Cursor passes `${workspaceFolder}`). Ignored if it is not an existing absolute folder.

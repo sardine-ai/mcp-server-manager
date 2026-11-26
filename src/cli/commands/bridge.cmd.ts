@@ -9,9 +9,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { isJSONRPCRequest } from "@modelcontextprotocol/sdk/types.js";
 import { getConfigService } from "../../services/config.service.js";
-import { PROJECT_DIR_HEADER, resolveProjectDir } from "../../services/gateway.service.js";
-
-const PROFILE_TARGET = /^\/mcp\/([A-Za-z0-9_-]{1,64})\/?$/;
+import {
+  MCP_PROFILE_ROUTE,
+  PROJECT_DIR_HEADER,
+  resolveProjectDir,
+} from "../../services/gateway.service.js";
 
 /**
  * The target only names the profile to serve. Where the gateway lives comes from settings,
@@ -33,11 +35,7 @@ function parseProfileTarget(target: string): string | undefined {
     throw new Error(`Invalid bridge target: ${target}`);
   }
 
-  if (path === "/mcp" || path === "/mcp/") {
-    return undefined;
-  }
-
-  const match = path.match(PROFILE_TARGET);
+  const match = path.replace(/\/+$/, "").match(MCP_PROFILE_ROUTE);
   if (!match) {
     throw new Error(`Bridge target must name a profile (/mcp/<id>), got: ${target}`);
   }

@@ -387,6 +387,46 @@ describe("AuthService unit coverage", () => {
     service.clearAllTokens();
   });
 
+  it("binds stored credentials to the URL they were issued for", () => {
+    const issued = token({ resourceUrl: "https://api.test/mcp" });
+    service.saveTokensForServer("remote", issued);
+
+    expect(service.getTokenForServer(remoteServer())).toEqual(issued);
+    expect(service.getTokenForServer(remoteServer({ url: "https://api.test/mcp/" }))).toEqual(
+      issued
+    );
+    expect(service.getTokenForServer(remoteServer({ url: "https://API.test/mcp" }))).toEqual(
+      issued
+    );
+    expect(
+      service.getTokenForServer(remoteServer({ url: "https://api.test/mcp?tenant=other" }))
+    ).toBeNull();
+    expect(service.getTokenForServer(remoteServer({ url: "https://other.test/mcp" }))).toBeNull();
+    expect(service.getStoredToken("remote")).toEqual(issued);
+  });
+
+  it("never refreshes credentials issued for another URL", async () => {
+    service.saveTokensForServer(
+      "remote",
+      token({
+        accessToken: "",
+        refreshToken: "refresh-token",
+        expiresAt: 0,
+        resourceUrl: "https://api.test/mcp",
+      })
+    );
+    const refreshSpy = vi.spyOn(service, "refreshTokenWithMutex").mockResolvedValue(null);
+
+    const moved = remoteServer({ url: "https://other.test/mcp" });
+    await expect(service.getValidToken(moved)).resolves.toBeNull();
+    await expect(service.ensureValidToken(moved)).resolves.toBe(false);
+    expect(refreshSpy).not.toHaveBeenCalled();
+
+    // The same stored record still refreshes for the URL it belongs to
+    await expect(service.ensureValidToken(remoteServer())).resolves.toBe(false);
+    expect(refreshSpy).toHaveBeenCalled();
+  });
+
   it("gets valid tokens directly or through refresh when close to expiry", async () => {
     const server = remoteServer();
 

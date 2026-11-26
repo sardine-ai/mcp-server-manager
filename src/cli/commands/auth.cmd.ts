@@ -362,7 +362,7 @@ export function registerAuthCommands(program: Command): void {
       }
 
       const server = serverResult.server as RemoteServer;
-      const token = authService.getStoredToken(server.id);
+      const token = authService.getTokenForServer(server);
 
       if (!token) {
         console.log(`${c.cross} No token stored for ${server.name}`);

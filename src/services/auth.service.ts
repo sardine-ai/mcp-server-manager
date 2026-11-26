@@ -74,7 +74,8 @@ function sameResourceUrl(a: string, b: string): boolean {
   const normalize = (value: string): string => {
     try {
       const url = new URL(value);
-      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+      url.pathname = url.pathname.replace(/\/+$/, "");
+      return url.href;
     } catch {
       return value.trim().replace(/\/+$/, "");
     }
@@ -940,13 +941,6 @@ export class AuthService {
     stored: StoredOAuthTokens
   ): Promise<StoredOAuthTokens | null> {
     if (!stored.refreshToken) {
-      return null;
-    }
-
-    if (stored.resourceUrl && !sameResourceUrl(stored.resourceUrl, server.url)) {
-      log.warn(
-        `Refusing to refresh ${server.id}: stored credentials were issued for ${stored.resourceUrl}`
-      );
       return null;
     }
 

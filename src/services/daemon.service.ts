@@ -38,12 +38,16 @@ export interface DaemonStatus {
   health?: DaemonHealthResponse;
 }
 
+const DAEMON_START = /\bdaemon\s+start\b(.*)$/;
+const FOREGROUND_FLAG = /(^|\s)(--foreground|-f)(\s|$)/;
+
 /**
  * A process owns the gateway port only if it is the gateway itself. Any other app that
  * happens to listen on that port must never be adopted, signalled or killed.
  */
 export function commandRunsMcpsmDaemon(command: string): boolean {
-  return /(^|\s)daemon\s+start\s+--foreground(\s|$)/.test(command.replace(/\\/g, "/"));
+  const args = command.replace(/\\/g, "/").match(DAEMON_START)?.[1];
+  return args !== undefined && FOREGROUND_FLAG.test(args);
 }
 
 function isProcessAlive(pid: number): boolean {

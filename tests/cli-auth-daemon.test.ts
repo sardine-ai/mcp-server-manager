@@ -175,7 +175,10 @@ describe("CLI auth/daemon commands", () => {
     await program.parseAsync(["node", "test", "auth", "logout", remoteServer.id, "--force"]);
     expect(mockAuthService.removeToken).toHaveBeenCalledWith(remoteServer.id);
 
-    mockAuthService.getStoredToken.mockReturnValue({ accessToken: "tok", refreshToken: "refresh" });
+    mockAuthService.getTokenForServer.mockReturnValue({
+      accessToken: "tok",
+      refreshToken: "refresh",
+    });
     await program.parseAsync(["node", "test", "auth", "refresh", remoteServer.id]);
     expect(mockAuthService.refreshToken).toHaveBeenCalled();
 
@@ -314,17 +317,20 @@ describe("CLI auth/daemon commands", () => {
     mockAuthService.waitForAuth.mockResolvedValueOnce({ success: false, error: "denied" });
     await program.parseAsync(["node", "test", "auth", "login-all", "--no-browser"]);
 
-    mockAuthService.getStoredToken.mockReturnValueOnce(null);
+    mockAuthService.getTokenForServer.mockReturnValueOnce(null);
     await expectProcessExit(() =>
       program.parseAsync(["node", "test", "auth", "refresh", remoteServer.id])
     );
 
-    mockAuthService.getStoredToken.mockReturnValueOnce({ accessToken: "tok", tokenType: "Bearer" });
+    mockAuthService.getTokenForServer.mockReturnValueOnce({
+      accessToken: "tok",
+      tokenType: "Bearer",
+    });
     await expectProcessExit(() =>
       program.parseAsync(["node", "test", "auth", "refresh", remoteServer.id])
     );
 
-    mockAuthService.getStoredToken.mockReturnValueOnce({
+    mockAuthService.getTokenForServer.mockReturnValueOnce({
       accessToken: "tok",
       refreshToken: "refresh",
       tokenType: "Bearer",

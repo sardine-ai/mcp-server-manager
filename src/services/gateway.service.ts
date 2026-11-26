@@ -42,6 +42,9 @@ const logger = createLogger("GatewayService");
 /** Header `mcpsm bridge` uses to send the client's project folder (URI-encoded). */
 export const PROJECT_DIR_HEADER = "x-mcpsm-project-dir";
 
+/** Gateway path: `/mcp` serves every server, `/mcp/<profileId>` only that profile */
+export const MCP_PROFILE_ROUTE = /^\/mcp(?:\/([a-zA-Z0-9_-]+))?$/;
+
 /**
  * First candidate that is an existing absolute folder. "/" and the home folder are
  * skipped: GUI clients start servers there when no project is open.
@@ -819,7 +822,7 @@ export async function startGateway(
       // MCP endpoint - handle all MCP requests
       // Matches /mcp (global) and /mcp/{profileId} (profile-specific)
       const parsedUrl = new URL(req.url || "/", `http://localhost:${gatewayState.port}`);
-      const mcpMatch = parsedUrl.pathname.match(/^\/mcp(?:\/([a-zA-Z0-9_-]+))?$/);
+      const mcpMatch = parsedUrl.pathname.match(MCP_PROFILE_ROUTE);
 
       if (mcpMatch) {
         const profileId = mcpMatch[1] || "default";

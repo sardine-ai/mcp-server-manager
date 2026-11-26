@@ -25,6 +25,14 @@ describe("bridge gateway URL", () => {
     expect(() => resolveGatewayUrl("http://localhost:8850/other/work")).toThrow();
     expect(() => resolveGatewayUrl("not a url")).toThrow();
   });
+
+  it("accepts any profile id the gateway itself would serve", () => {
+    const longId = "a".repeat(80);
+    expect(resolveGatewayUrl(`http://localhost:8850/mcp/${longId}`).pathname).toBe(
+      `/mcp/${longId}`
+    );
+    expect(resolveGatewayUrl("http://localhost:8850/mcp/work/").pathname).toBe("/mcp/work");
+  });
 });
 
 describe("daemon process identification", () => {
@@ -40,9 +48,18 @@ describe("daemon process identification", () => {
     ).toBe(true);
   });
 
+  it("recognises the short flag and other options around it", () => {
+    const cli = "node /usr/local/lib/node_modules/mcp-server-manager/dist/cli/index.js";
+    expect(commandRunsMcpsmDaemon(`${cli} daemon start -f`)).toBe(true);
+    expect(commandRunsMcpsmDaemon(`${cli} daemon start --foreground -p work`)).toBe(true);
+    expect(commandRunsMcpsmDaemon(`${cli} daemon start -f -p work`)).toBe(true);
+  });
+
   it("does not mistake another app on the port for the daemon", () => {
     expect(commandRunsMcpsmDaemon("node /tmp/vite/bin/vite.js --port 8850")).toBe(false);
     expect(commandRunsMcpsmDaemon("python3 -m http.server 8850")).toBe(false);
     expect(commandRunsMcpsmDaemon("mcpsm daemon start")).toBe(false);
+    expect(commandRunsMcpsmDaemon("mcpsm daemon start --force")).toBe(false);
+    expect(commandRunsMcpsmDaemon("mcpsm daemon start --profile foreground")).toBe(false);
   });
 });

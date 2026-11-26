@@ -40,14 +40,17 @@ export interface DaemonStatus {
 
 const DAEMON_START = /\bdaemon\s+start\b(.*)$/;
 const FOREGROUND_FLAG = /(^|\s)(--foreground|-f)(\s|$)/;
+/** The CLI itself, by its entry point or installed name, at the start of a word */
+const CLI_ENTRY = /(^|[\s/"'])(mcpsm|cli\.(js|ts)|index\.(js|ts))(\s|["']|$)/;
 
 /**
  * A process owns the gateway port only if it is the gateway itself. Any other app that
  * happens to listen on that port must never be adopted, signalled or killed.
  */
 export function commandRunsMcpsmDaemon(command: string): boolean {
-  const args = command.replace(/\\/g, "/").match(DAEMON_START)?.[1];
-  return args !== undefined && FOREGROUND_FLAG.test(args);
+  const normalized = command.replace(/\\/g, "/");
+  const args = normalized.match(DAEMON_START)?.[1];
+  return args !== undefined && FOREGROUND_FLAG.test(args) && CLI_ENTRY.test(normalized);
 }
 
 function isProcessAlive(pid: number): boolean {

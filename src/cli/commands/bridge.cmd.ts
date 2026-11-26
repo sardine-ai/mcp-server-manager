@@ -16,30 +16,32 @@ import {
 } from "../../services/gateway.service.js";
 
 /**
- * The target only names the profile to serve. Where the gateway lives comes from settings,
- * because the target sits in a client config: without this, any app or repo that wrote that
- * config could make the bridge ship tool calls and results to its own host.
+ * The target only names the profile and port to serve; the host always comes from the bridge.
+ * The target sits in a client config, so trusting it would let any app or repo that wrote that
+ * config ship tool calls and results to its own host. The port is not a destination: a client
+ * started from the desktop does not inherit MCP_MANAGER_CONFIG_DIR, so it cannot read the
+ * manager's own settings and has to be told which daemon to reach.
  */
 export function resolveGatewayUrl(target?: string): URL {
-  const profileId = target ? parseProfileTarget(target) : undefined;
-  const port = getConfigService().getPort();
-  const path = profileId ? `/mcp/${profileId}` : "/mcp";
+  const named = target ? parseBridgeTarget(target) : { profileId: undefined, port: 0 };
+  const port = named.port || getConfigService().getPort();
+  const path = named.profileId ? `/mcp/${named.profileId}` : "/mcp";
   return new URL(`http://127.0.0.1:${port}${path}`);
 }
 
-function parseProfileTarget(target: string): string | undefined {
-  let path: string;
+function parseBridgeTarget(target: string): { profileId?: string; port: number } {
+  let url: URL;
   try {
-    path = new URL(target).pathname;
+    url = new URL(target);
   } catch {
     throw new Error(`Invalid bridge target: ${target}`);
   }
 
-  const match = path.replace(/\/+$/, "").match(MCP_PROFILE_ROUTE);
+  const match = url.pathname.replace(/\/+$/, "").match(MCP_PROFILE_ROUTE);
   if (!match) {
     throw new Error(`Bridge target must name a profile (/mcp/<id>), got: ${target}`);
   }
-  return match[1];
+  return { profileId: match[1], port: Number(url.port) };
 }
 
 // ponytail: no re-initialize if the daemon restarts mid-session; the client restarts the server.

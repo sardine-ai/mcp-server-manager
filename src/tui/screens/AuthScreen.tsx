@@ -92,6 +92,9 @@ export function AuthScreen({
       const isBearerOnly = !isOAuthEnabled;
 
       const hasToken = !!token;
+      // A credential stored for another URL is unusable but still removable, so revocation
+      // is gated on the record, not on the token the gateway is allowed to send.
+      const hasStoredToken = !!authService.getStoredToken(server.id);
       const hasRefresh = !!token?.refreshToken || !!server.oauth?.clientSecret;
 
       // Check if server actually needs auth (test it) - only if no tokens at all
@@ -102,7 +105,7 @@ export function AuthScreen({
         requiresAuth = testResult.requiresAuth || false;
       }
 
-      const shouldInclude = isOAuthEnabled || hasToken;
+      const shouldInclude = isOAuthEnabled || hasToken || hasStoredToken;
       if (!shouldInclude) {
         continue;
       }
@@ -369,9 +372,9 @@ export function AuthScreen({
           startAuth(selected.server);
         }
       } else if (input === "r" || input === "R") {
-        // Revoke selected server's token (if it has one)
+        // Revoke selected server's token (if any is stored for it)
         const selected = allServers[selectedIndex];
-        if (selected && selected.status.hasToken) {
+        if (selected && getAuthService().getStoredToken(selected.server.id)) {
           setConfirmRevoke({ id: selected.server.id, name: selected.server.name });
         }
       } else if (input.toLowerCase() === "a") {

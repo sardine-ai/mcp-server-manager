@@ -26,6 +26,15 @@ describe("bridge gateway URL", () => {
     expect(() => resolveGatewayUrl("not a url")).toThrow();
   });
 
+  it("reaches the port the client entry names, for clients that cannot read the settings", () => {
+    expect(resolveGatewayUrl("http://localhost:9000/mcp").origin).toBe("http://127.0.0.1:9000");
+    expect(resolveGatewayUrl("http://localhost:9000/mcp/work").origin).toBe(
+      "http://127.0.0.1:9000"
+    );
+    // No port in the target: the manager's own settings decide
+    expect(resolveGatewayUrl("http://localhost/mcp").origin).toBe("http://127.0.0.1:8850");
+  });
+
   it("accepts any profile id the gateway itself would serve", () => {
     const longId = "a".repeat(80);
     expect(resolveGatewayUrl(`http://localhost:8850/mcp/${longId}`).pathname).toBe(
@@ -61,5 +70,10 @@ describe("daemon process identification", () => {
     expect(commandRunsMcpsmDaemon("mcpsm daemon start")).toBe(false);
     expect(commandRunsMcpsmDaemon("mcpsm daemon start --force")).toBe(false);
     expect(commandRunsMcpsmDaemon("mcpsm daemon start --profile foreground")).toBe(false);
+  });
+
+  it("does not accept another program that repeats the daemon words", () => {
+    expect(commandRunsMcpsmDaemon("node /tmp/evil.js daemon start -f")).toBe(false);
+    expect(commandRunsMcpsmDaemon("/tmp/mcpsm-helper daemon start --foreground")).toBe(false);
   });
 });

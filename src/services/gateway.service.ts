@@ -1223,9 +1223,73 @@ export async function refreshGatewayTools(
 }
 
 /**
+ * The daemon must answer signals from the moment it is discoverable: node's default action for
+ * SIGHUP is to terminate, so a refresh that lands during startup would kill the gateway. Handlers
+ * are installed up front, and refreshes wait on `ready` until the gateway is listening.
+ */
+function registerForegroundSignals(): { ready: () => void } {
+  let markReady = (): void => {};
+  const ready = new Promise<void>((resolve) => {
+    markReady = resolve;
+  });
+
+  let shuttingDown = false;
+  const shutdown = async (): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log("\nShutting down...");
+    await stopGateway();
+    process.exit(0);
+  };
+
+  const handleError = (error: Error): void => {
+    console.error("Uncaught error:", error);
+    void shutdown();
+  };
+
+  const changeWhenReady = (
+    apply: () => Promise<{ success: boolean; error?: string }>,
+    describeFailure: string
+  ): void => {
+    void ready
+      .then(apply)
+      .then((result) => {
+        if (!result.success) {
+          logger.warn(`${describeFailure}: ${result.error}`);
+        }
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(`${describeFailure}: ${message}`);
+      });
+  };
+
+  process.on("SIGINT", () => void shutdown());
+  process.on("SIGTERM", () => void shutdown());
+  process.on("SIGHUP", () =>
+    changeWhenReady(() => refreshGateway("signal"), "Gateway refresh from signal failed")
+  );
+  process.on("SIGUSR1", () =>
+    changeWhenReady(() => refreshGatewayTools("signal"), "Gateway tool refresh from signal failed")
+  );
+  process.on("uncaughtException", handleError);
+  process.on("unhandledRejection", (reason) => {
+    handleError(reason instanceof Error ? reason : new Error(String(reason)));
+  });
+
+  return { ready: markReady };
+}
+
+/**
  * Run gateway in foreground mode (blocking)
  */
-export async function runGatewayForeground(selectedServerIds?: string[]): Promise<void> {
+export async function runGatewayForeground(
+  selectedServerIds?: string[],
+  options?: { onSignalsReady?: () => void }
+): Promise<void> {
+  const signals = registerForegroundSignals();
+  options?.onSignalsReady?.();
+
   const result = await startGateway(selectedServerIds);
 
   if (!result.success) {
@@ -1238,54 +1302,7 @@ export async function runGatewayForeground(selectedServerIds?: string[]): Promis
   console.log(`Serving ${gatewayState.aggregatedTools.length} tools`);
   console.log("Press Ctrl+C to stop");
 
-  // Handle shutdown signals
-  const shutdown = async (): Promise<void> => {
-    console.log("\nShutting down...");
-    await stopGateway();
-    process.exit(0);
-  };
-
-  // Handle uncaught errors to ensure cleanup
-  const handleError = async (error: Error): Promise<void> => {
-    console.error("Uncaught error:", error);
-    await shutdown();
-  };
-
-  const handleRefreshSignal = (): void => {
-    refreshGateway("signal")
-      .then((result) => {
-        if (!result.success) {
-          logger.warn(`Gateway refresh from signal failed: ${result.error}`);
-        }
-      })
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error(`Gateway refresh from signal crashed: ${message}`);
-      });
-  };
-
-  const handleToolRefreshSignal = (): void => {
-    refreshGatewayTools("signal")
-      .then((result) => {
-        if (!result.success) {
-          logger.warn(`Gateway tool refresh from signal failed: ${result.error}`);
-        }
-      })
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error(`Gateway tool refresh from signal crashed: ${message}`);
-      });
-  };
-
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
-  process.on("SIGHUP", handleRefreshSignal);
-  process.on("SIGUSR1", handleToolRefreshSignal);
-  process.on("uncaughtException", handleError);
-  process.on("unhandledRejection", (reason) => {
-    const error = reason instanceof Error ? reason : new Error(String(reason));
-    handleError(error);
-  });
+  signals.ready();
 
   // Keep process alive
   await new Promise(() => {});

@@ -65,11 +65,11 @@ mcpsm daemon start --foreground
 
 ### What Happens
 
-1. Selected servers are spawned
-2. Gateway server starts on configured port (default: 8850)
-3. Gateway listens on `localhost:{port}/mcp`
-4. Process runs in background
-5. PID is saved for later management
+1. The process starts answering signals and records its PID, so `status` and `stop` work even while it is still starting
+2. Selected servers are spawned
+3. Gateway server starts on configured port (default: 8850)
+4. Gateway listens on `localhost:{port}/mcp`
+5. Process runs in background
 6. Connected clients can now access all running servers through the gateway
 
 With [auto-start](#daemon-startup) enabled, the daemon is started through the LaunchAgent (`launchctl`) or systemd user service instead of a separate process, so the two never race for the port.
@@ -102,6 +102,8 @@ mcpsm daemon refresh
 ```
 
 Use this after editing servers or tool filters to push changes to the running gateway.
+
+If the gateway is still starting when the refresh arrives, the refresh is applied once startup finishes instead of being lost.
 
 ---
 

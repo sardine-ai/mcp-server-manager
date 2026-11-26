@@ -207,6 +207,23 @@ describe("CLI auth/daemon commands", () => {
     expect(mockGateway.runGatewayForeground).toHaveBeenCalled();
   });
 
+  it("claims the PID only once the foreground gateway answers signals", async () => {
+    const program = buildDaemonProgram();
+    let claimedBeforeHook = false;
+
+    mockGateway.runGatewayForeground.mockImplementationOnce(
+      async (_servers?: string[], options?: { onSignalsReady?: () => void }) => {
+        claimedBeforeHook = mockDaemonService.claimPidFile.mock.calls.length > 0;
+        options?.onSignalsReady?.();
+      }
+    );
+
+    await program.parseAsync(["node", "test", "daemon", "start", "--foreground"]);
+
+    expect(claimedBeforeHook).toBe(false);
+    expect(mockDaemonService.claimPidFile).toHaveBeenCalledTimes(1);
+  });
+
   it("refreshes daemon and clears logs", async () => {
     const program = buildDaemonProgram();
 

@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import { getConfigService } from "./config.service.js";
 import { getClientService } from "./client.service.js";
+import { sameResourceUrl } from "./auth.service.js";
 import { applyPrivateMode, PRIVATE_FILE_MODE } from "../shared/secure-storage.js";
 import type { LocalServer, RemoteServer, Result, TransportType, ClientId } from "../types/index.js";
 import type {
@@ -464,18 +465,28 @@ export class ImportExportService {
       } as LocalServer;
     } else {
       const existingRemote = existing as RemoteServer;
-      const mergedHeaders = {
-        ...(existingRemote.headers || {}),
-        ...(incoming.headers || {}),
-      };
-      // For remote servers, prefer incoming URL but keep existing token if not provided
+      const url = incoming.url || existingRemote.url;
+      // A token or secret header belongs to the host it was issued for. When a merge
+      // moves the server to another URL, the old credentials must not follow it.
+      const urlChanged = !sameResourceUrl(existingRemote.url, url);
+      const mergedHeaders = urlChanged
+        ? { ...(incoming.headers || {}) }
+        : { ...(existingRemote.headers || {}), ...(incoming.headers || {}) };
+      const oauth =
+        urlChanged && existingRemote.oauth
+          ? { ...existingRemote.oauth, clientSecret: undefined }
+          : existingRemote.oauth;
+
       return {
         id: existingRemote.id,
         name: incoming.name || existingRemote.name,
-        url: incoming.url || existingRemote.url,
+        url,
         type: incoming.type || existingRemote.type,
         headers: Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
-        bearerToken: incoming.bearerToken || existingRemote.bearerToken,
+        bearerToken: urlChanged
+          ? incoming.bearerToken
+          : incoming.bearerToken || existingRemote.bearerToken,
+        oauth,
       } as RemoteServer;
     }
   }

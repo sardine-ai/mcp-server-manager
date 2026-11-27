@@ -98,6 +98,7 @@ describe("createTransportAuthProvider", () => {
         enabled: true,
         clientId: "server-client",
         clientSecret: "server-secret",
+        authServerUrl: "https://example.test",
       },
     });
     const { authService } = createAuthHarness({
@@ -116,7 +117,9 @@ describe("createTransportAuthProvider", () => {
   });
 
   it("falls back from stored OAuth client credentials to the server URL", async () => {
-    const server = createServer();
+    const server = createServer({
+      oauth: { enabled: true, authServerUrl: "https://example.test" },
+    });
     const storedAuth = createAuthHarness({
       accessToken: "access",
       tokenType: "Bearer",
@@ -134,6 +137,22 @@ describe("createTransportAuthProvider", () => {
     const fallbackProvider = createTransportAuthProvider(server, emptyAuth.authService);
     await expect(fallbackProvider.clientInformation()).resolves.toEqual({
       client_id: "https://example.test/mcp",
+    });
+  });
+
+  it("withholds a stored client secret when the authorization server is not pinned", async () => {
+    const server = createServer();
+    const { authService } = createAuthHarness({
+      accessToken: "access",
+      tokenType: "Bearer",
+      clientId: "stored-client",
+      clientSecret: "stored-secret",
+    });
+
+    const provider = createTransportAuthProvider(server, authService);
+
+    await expect(provider.clientInformation()).resolves.toEqual({
+      client_id: "stored-client",
     });
   });
 

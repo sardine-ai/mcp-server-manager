@@ -7,6 +7,7 @@ import type {
 import type { RemoteServer, StoredOAuthTokens } from "../types/index.js";
 import AuthService from "./auth.service.js";
 import { createLogger } from "../shared/logger.js";
+import { isSafeAuthUrl } from "../shared/validators.js";
 
 const log = createLogger("TransportAuthProvider");
 
@@ -15,6 +16,16 @@ const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
 
 /** Default redirect URI placeholder (only used if a fresh login is required) */
 const DEFAULT_REDIRECT_URL = new URL("http://127.0.0.1:8400/callback");
+
+/**
+ * The SDK resolves its own authorization server from remote metadata, which cannot be
+ * validated from here. Only offer it a client secret when the user pinned the
+ * authorization server, so a remote document cannot name the host that receives it.
+ */
+function canOfferClientSecret(server: RemoteServer): boolean {
+  const pinned = server.oauth?.authServerUrl;
+  return Boolean(pinned && isSafeAuthUrl(pinned));
+}
 
 function toOAuthTokens(stored: StoredOAuthTokens): OAuthTokens {
   return {
@@ -114,9 +125,11 @@ export function createTransportAuthProvider(
         return { client_id: server.url };
       }
 
-      return clientSecret
-        ? { client_id: clientId, client_secret: clientSecret }
-        : { client_id: clientId };
+      if (clientSecret && canOfferClientSecret(server)) {
+        return { client_id: clientId, client_secret: clientSecret };
+      }
+
+      return { client_id: clientId };
     },
     async tokens(): Promise<OAuthTokens | undefined> {
       const current = await ensureFreshTokens();

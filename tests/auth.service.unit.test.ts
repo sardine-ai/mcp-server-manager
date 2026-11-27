@@ -146,9 +146,25 @@ describe("AuthService unit coverage", () => {
     );
 
     await expect(
-      service.fetchProtectedResourceMetadata("https://api.test/mcp", "https://meta.test/custom")
+      service.fetchProtectedResourceMetadata("https://api.test/mcp", "https://api.test/custom")
     ).resolves.toEqual({ resource: "https://api.test/custom" });
-    expect(fetchMock.mock.calls[1][0]).toBe("https://meta.test/custom");
+    expect(fetchMock.mock.calls[1][0]).toBe("https://api.test/custom");
+  });
+
+  it("ignores a resource metadata URL outside the MCP server origin", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(responseJson({ resource: "https://api.test/well-known" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      service.fetchProtectedResourceMetadata("https://api.test/mcp", "https://meta.test/custom")
+    ).resolves.toEqual({ resource: "https://api.test/well-known" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://api.test/.well-known/oauth-protected-resource/mcp"
+    );
   });
 
   it("returns null when protected-resource metadata cannot be fetched", async () => {
@@ -188,34 +204,68 @@ describe("AuthService unit coverage", () => {
       .spyOn(service, "fetchProtectedResourceMetadata")
       .mockResolvedValueOnce({
         resource: "https://api.test",
+        authorization_servers: ["https://api.test"],
+      })
+      .mockResolvedValueOnce({
+        resource: "https://api.test",
+        authorization_servers: ["https://api.test"],
+      })
+      .mockResolvedValueOnce({
+        resource: "https://api.test",
         authorization_servers: ["https://resource-auth.test"],
       })
-      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null);
     const fetchAuth = vi.spyOn(service, "fetchAuthServerMetadata").mockResolvedValue(AUTH_METADATA);
 
-    await expect(service.discoverAuthServer(remoteServer())).resolves.toEqual({
+    // Advertised on the MCP server's own origin: used.
+    await expect(service.discoverAuthServer(remoteServer())).resolves.toMatchObject({
       metadata: AUTH_METADATA,
-      resourceMetadata: {
-        resource: "https://api.test",
-        authorization_servers: ["https://resource-auth.test"],
-      },
     });
-    expect(fetchAuth).toHaveBeenLastCalledWith("https://resource-auth.test");
+    expect(fetchAuth).toHaveBeenLastCalledWith("https://api.test");
 
+    // Pinned by the user: wins over what the server advertises.
     await expect(
       service.discoverAuthServer(
         remoteServer({ oauth: { enabled: true, authServerUrl: "https://configured-auth.test" } })
       )
-    ).resolves.toEqual({ metadata: AUTH_METADATA, resourceMetadata: undefined });
+    ).resolves.toMatchObject({ metadata: AUTH_METADATA });
     expect(fetchAuth).toHaveBeenLastCalledWith("https://configured-auth.test");
 
-    await expect(service.discoverAuthServer(remoteServer())).resolves.toEqual({
+    // Advertised on another origin: ignored, falls back to the server origin.
+    await expect(service.discoverAuthServer(remoteServer())).resolves.toMatchObject({
       metadata: AUTH_METADATA,
-      resourceMetadata: undefined,
     });
     expect(fetchAuth).toHaveBeenLastCalledWith("https://api.test");
-    expect(fetchProtected).toHaveBeenCalledTimes(3);
+
+    // No protected-resource metadata: server origin.
+    await expect(service.discoverAuthServer(remoteServer())).resolves.toMatchObject({
+      metadata: AUTH_METADATA,
+    });
+    expect(fetchAuth).toHaveBeenLastCalledWith("https://api.test");
+    expect(fetchProtected).toHaveBeenCalledTimes(4);
+  });
+
+  it("rejects auth server metadata whose endpoints leave the authorization server origin", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        responseJson({
+          issuer: "https://auth.test",
+          authorization_endpoint: "https://auth.test/authorize",
+          token_endpoint: "https://collect.test/token",
+        })
+      )
+    );
+
+    await expect(service.fetchAuthServerMetadata("https://auth.test")).resolves.toBeNull();
+  });
+
+  it("refuses a plain-http authorization server that is not on this machine", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(responseJson(AUTH_METADATA));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(service.fetchAuthServerMetadata("http://auth.test")).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("returns null when auth discovery cannot resolve metadata", async () => {
@@ -425,6 +475,19 @@ describe("AuthService unit coverage", () => {
     // The same stored record still refreshes for the URL it belongs to
     await expect(service.ensureValidToken(remoteServer())).resolves.toBe(false);
     expect(refreshSpy).toHaveBeenCalled();
+  });
+
+  it("does not use a refresh token issued for another URL", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await service.refreshToken(
+      remoteServer({ url: "https://other.test/mcp" }),
+      token({ resourceUrl: "https://api.test/mcp" })
+    );
+
+    expect(result).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("does not hand back a credential another URL replaced mid-refresh", async () => {

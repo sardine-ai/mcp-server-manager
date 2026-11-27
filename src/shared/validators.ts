@@ -58,6 +58,33 @@ export function validateUrl(url: string): ValidationResult {
   }
 }
 
+/** Hosts that mean "this machine", where plain http is acceptable. */
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Whether an OAuth endpoint URL is safe to call: https, or http on this machine.
+ * Discovery metadata is supplied by the remote server, so a plain-http or
+ * off-origin endpoint is rejected before any request carries a secret to it.
+ */
+export function isSafeAuthUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === "https:") return true;
+    return parsed.protocol === "http:" && LOOPBACK_HOSTNAMES.has(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** Whether two URLs share scheme, host and port. */
+export function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Validate server ID format
  * @param id - Server ID to validate

@@ -27,6 +27,7 @@ import type {
   RemoteServer,
 } from "../types/index.js";
 import { createLogger } from "../shared/logger.js";
+import { isSafeAuthUrl, sameOrigin } from "../shared/validators.js";
 import { renderCallbackPage } from "./auth-callback.html.js";
 import {
   applyPrivateMode,
@@ -81,6 +82,19 @@ function sameResourceUrl(a: string, b: string): boolean {
     }
   };
   return normalize(a) === normalize(b);
+}
+
+/** Every endpoint in the metadata must stay on the authorization server's origin. */
+function hasTrustedEndpoints(metadata: AuthServerMetadata, authServerUrl: string): boolean {
+  const endpoints = [
+    metadata.authorization_endpoint,
+    metadata.token_endpoint,
+    metadata.registration_endpoint,
+  ].filter((endpoint): endpoint is string => typeof endpoint === "string" && endpoint !== "");
+
+  return endpoints.every(
+    (endpoint) => isSafeAuthUrl(endpoint) && sameOrigin(endpoint, authServerUrl)
+  );
 }
 
 export class AuthService {
@@ -334,9 +348,12 @@ export class AuthService {
     try {
       let url: string;
 
-      if (metadataUrl) {
+      if (metadataUrl && isSafeAuthUrl(metadataUrl) && sameOrigin(metadataUrl, serverUrl)) {
         url = metadataUrl;
       } else {
+        if (metadataUrl) {
+          log.warn(`Ignoring resource metadata URL outside the MCP server origin: ${metadataUrl}`);
+        }
         // Try well-known URI as per RFC 9728
         const serverUri = new URL(serverUrl);
         const pathPrefix = serverUri.pathname !== "/" ? serverUri.pathname : "";
@@ -365,6 +382,11 @@ export class AuthService {
 
   /** Fetch authorization server metadata (RFC 8414) */
   async fetchAuthServerMetadata(authServerUrl: string): Promise<AuthServerMetadata | null> {
+    if (!isSafeAuthUrl(authServerUrl)) {
+      log.warn(`Refusing to fetch auth server metadata over an unsafe URL: ${authServerUrl}`);
+      return null;
+    }
+
     try {
       const serverUri = new URL(authServerUrl);
 
@@ -387,6 +409,10 @@ export class AuthService {
           if (response.ok) {
             const metadata = (await response.json()) as AuthServerMetadata;
             if (metadata.authorization_endpoint && metadata.token_endpoint) {
+              if (!hasTrustedEndpoints(metadata, authServerUrl)) {
+                log.warn(`Ignoring auth server metadata with endpoints outside ${authServerUrl}`);
+                continue;
+              }
               log.debug("Found auth server metadata at:", url);
               return metadata;
             }
@@ -420,18 +446,40 @@ export class AuthService {
 
       let authServerUrl: string | undefined;
 
-      if (resourceMetadata?.authorization_servers?.length) {
-        authServerUrl = resourceMetadata.authorization_servers[0];
-      } else if (server.oauth?.authServerUrl) {
-        authServerUrl = server.oauth.authServerUrl;
-      } else {
-        // Fall back to using the server's URL as the auth server
-        const serverUri = new URL(server.url);
-        authServerUrl = serverUri.origin;
+      const configured = server.oauth?.authServerUrl;
+      const advertised = resourceMetadata?.authorization_servers?.[0];
+
+      if (configured) {
+        if (isSafeAuthUrl(configured)) {
+          authServerUrl = configured;
+        } else {
+          log.warn(`Ignoring unsafe oauth.authServerUrl for ${server.id}: ${configured}`);
+        }
+      }
+
+      if (!authServerUrl && advertised) {
+        // Protected resource metadata outranks config only when it stays on the
+        // MCP server's own origin. Anything else could point discovery at a host
+        // that then receives the token request.
+        if (isSafeAuthUrl(advertised) && sameOrigin(advertised, server.url)) {
+          authServerUrl = advertised;
+        } else {
+          log.warn(
+            `Ignoring authorization server outside the MCP server origin for ${server.id}: ${advertised}`
+          );
+        }
       }
 
       if (!authServerUrl) {
-        log.debug("No authorization server URL found for server:", server.id);
+        // Fall back to using the server's URL as the auth server
+        const serverUri = new URL(server.url);
+        if (isSafeAuthUrl(serverUri.origin)) {
+          authServerUrl = serverUri.origin;
+        }
+      }
+
+      if (!authServerUrl) {
+        log.warn(`No safe authorization server found for ${server.id}`);
         return null;
       }
 
@@ -941,6 +989,13 @@ export class AuthService {
     stored: StoredOAuthTokens
   ): Promise<StoredOAuthTokens | null> {
     if (!stored.refreshToken) {
+      return null;
+    }
+
+    if (stored.resourceUrl && !sameResourceUrl(stored.resourceUrl, server.url)) {
+      log.warn(
+        `Skipping OAuth refresh for ${server.id}: credentials were issued for ${stored.resourceUrl}, server is now ${server.url}`
+      );
       return null;
     }
 

@@ -70,7 +70,7 @@ const PROACTIVE_REFRESH_MARGIN_MS = 10 * 60 * 1000; // 10 minutes before expiry
 const PROACTIVE_RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 240_000, 480_000]; // exponential backoff
 
 /** Compare server URLs, treating a trailing slash as insignificant */
-function sameResourceUrl(a: string, b: string): boolean {
+export function sameResourceUrl(a: string, b: string): boolean {
   const normalize = (value: string): string => {
     try {
       const url = new URL(value);

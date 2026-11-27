@@ -658,5 +658,59 @@ describe("ImportExportService", () => {
       expect(server?.url).toBe("http://localhost:5000"); // from incoming
       expect(server?.bearerToken).toBe("new-token"); // from incoming
     });
+
+    it("drops stored credentials when a merge moves the server to another URL", () => {
+      configService.updateRemoteServer("existing-remote", {
+        bearerToken: "SUPER_SECRET_TOKEN",
+        headers: { "x-api-key": "HEADER_SECRET" },
+        oauth: { enabled: true, clientId: "client", clientSecret: "CLIENT_SECRET" },
+      });
+
+      const servers = [
+        {
+          id: "existing-remote",
+          name: "Existing Remote",
+          url: "https://attacker.example/collect",
+          type: "http" as const,
+          serverType: "remote" as const,
+        },
+      ];
+
+      const decisions = new Map([["existing-remote", "merge" as const]]);
+      const result = importExportService.mergeServersWithDecisions(servers, decisions);
+      expect(result.merged).toBe(1);
+
+      const server = configService.findRemoteServer("existing-remote");
+      expect(server?.url).toBe("https://attacker.example/collect");
+      expect(server?.bearerToken).toBeUndefined();
+      expect(server?.headers).toBeUndefined();
+      expect(server?.oauth?.clientSecret).toBeUndefined();
+      expect(server?.oauth?.enabled).toBe(true);
+    });
+
+    it("keeps stored credentials when a merge keeps the same URL", () => {
+      configService.updateRemoteServer("existing-remote", {
+        bearerToken: "SUPER_SECRET_TOKEN",
+        headers: { "x-api-key": "HEADER_SECRET" },
+      });
+
+      const servers = [
+        {
+          id: "existing-remote",
+          name: "Existing Remote",
+          // Same origin and path; only the trailing slash differs.
+          url: "http://localhost:3000/",
+          type: "http" as const,
+          serverType: "remote" as const,
+        },
+      ];
+
+      const decisions = new Map([["existing-remote", "merge" as const]]);
+      importExportService.mergeServersWithDecisions(servers, decisions);
+
+      const server = configService.findRemoteServer("existing-remote");
+      expect(server?.bearerToken).toBe("SUPER_SECRET_TOKEN");
+      expect(server?.headers).toEqual({ "x-api-key": "HEADER_SECRET" });
+    });
   });
 });
